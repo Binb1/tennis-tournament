@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#00503c" />
+    <meta name="description" content="Un joueur par tour. Il perd, tu sors." />
+    <title>Tiebreakers</title>
+    <script>
+      // Court surface (src/lib/theme.ts), applied before first paint.
+      try {
+        var t = localStorage.getItem("tiebreakers-theme")
+        var c = {
+          usopen: "#0b1f3a", ao: "#062a4d", wimbledon: "#0c3b1f", indianwells: "#1b3a2b", miami: "#0a3140",
+          montecarlo: "#0a2d5c", madrid: "#2a0a1f", rome: "#1a3a2a", canada: "#b0162f", cincinnati: "#13301f",
+          shanghai: "#7a1016", paris: "#07090f",
+        }[t]
+        if (c) {
+          document.documentElement.dataset.theme = t
+          document.querySelector('meta[name="theme-color"]').setAttribute("content", c)
+        }
+      } catch (e) {}
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=Barlow+Condensed:wght@600;700&family=Cinzel:wght@700&family=DM+Serif+Display&family=Josefin+Sans:wght@700&family=Limelight&family=Outfit:wght@500;600;700&family=Playfair+Display:ital,wght@1,700&family=Shrikhand&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
