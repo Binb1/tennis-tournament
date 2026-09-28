@@ -1,50 +1,103 @@
 import { useState, type FormEvent } from "react"
-import { Navigate } from "react-router-dom"
+import { Navigate, useNavigate } from "react-router-dom"
 import { ArrowRight } from "lucide-react"
 
-import { AppShell, Box, ChalkButton, ErrorBox, Field, PageTitle } from "@/components/court/AppShell"
+import { AppShell, Box, ChalkButton, ErrorBox, Field, PageTitle, PasswordField } from "@/components/court/AppShell"
 import { useAuth } from "@/lib/auth"
+import { authErrorFr } from "@/lib/authErrors"
 import { supabase } from "@/lib/supabase"
+
+type Mode = "signin" | "signup"
 
 export default function Login() {
   const { session, loading } = useAuth()
+  const navigate = useNavigate()
+  const [mode, setMode] = useState<Mode>("signin")
   const [email, setEmail] = useState("")
-  const [sending, setSending] = useState(false)
-  const [sent, setSent] = useState(false)
+  const [password, setPassword] = useState("")
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** Message shown instead of the form (confirmation mail, reset mail). */
+  const [notice, setNotice] = useState<{ title: string; body: string } | null>(null)
 
   if (!loading && session) return <Navigate to="/tournois" replace />
 
   async function submit(e: FormEvent) {
     e.preventDefault()
-    setSending(true)
     setError(null)
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: { emailRedirectTo: window.location.origin + "/tournois" },
-    })
-    setSending(false)
-    if (error) setError(error.message)
-    else setSent(true)
+    if (mode === "signup" && password.length < 8) {
+      setError("Mot de passe trop court (8 caractères minimum)")
+      return
+    }
+    setBusy(true)
+    const creds = { email: email.trim(), password }
+    if (mode === "signin") {
+      const { error } = await supabase.auth.signInWithPassword(creds)
+      setBusy(false)
+      if (error) return setError(authErrorFr(error))
+      navigate("/tournois", { replace: true })
+    } else {
+      const { data, error } = await supabase.auth.signUp({
+        ...creds,
+        options: { emailRedirectTo: window.location.origin + "/tournois" },
+      })
+      setBusy(false)
+      if (error) return setError(authErrorFr(error))
+      if (!data.session) {
+        setNotice({ title: "Presque fini", body: "Vérifie ta boîte mail pour confirmer ton compte." })
+        return
+      }
+      navigate("/tournois", { replace: true })
+    }
   }
+
+  async function forgot() {
+    setError(null)
+    if (!email.trim()) {
+      setError("Saisis ton adresse e-mail, puis clique à nouveau sur « Mot de passe oublié ? »")
+      return
+    }
+    setBusy(true)
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: window.location.origin + "/nouveau-mot-de-passe",
+    })
+    setBusy(false)
+    if (error) return setError(authErrorFr(error))
+    setNotice({
+      title: "Regarde tes mails",
+      body: `Si un compte existe pour ${email.trim()}, un lien pour choisir un nouveau mot de passe vient d'être envoyé.`,
+    })
+  }
+
+  function switchMode() {
+    setMode((m) => (m === "signin" ? "signup" : "signin"))
+    setError(null)
+  }
+
+  const signup = mode === "signup"
 
   return (
     <AppShell bare>
-      <PageTitle eyebrow="Connexion">Entre sur le court</PageTitle>
+      <PageTitle eyebrow={signup ? "Inscription" : "Connexion"}>
+        {signup ? "Crée ton compte" : "Entre sur le court"}
+      </PageTitle>
 
-      {sent ? (
+      {notice ? (
         <Box className="px-5 py-6">
-          <p className="font-display text-2xl">Regarde tes mails</p>
-          <p className="mt-2 text-chalk/90">
-            Un lien de connexion vient d'être envoyé à <strong>{email}</strong>. Ouvre-le sur cet appareil.
-          </p>
-          <button onClick={() => setSent(false)} className="mt-4 min-h-11 text-sm underline underline-offset-4">
-            Changer d'adresse
+          <p className="font-display text-2xl">{notice.title}</p>
+          <p className="mt-2 text-chalk/90">{notice.body}</p>
+          <button
+            onClick={() => {
+              setNotice(null)
+              setMode("signin")
+            }}
+            className="mt-4 min-h-11 text-sm underline underline-offset-4"
+          >
+            Retour à la connexion
           </button>
         </Box>
       ) : (
         <form onSubmit={submit} className="space-y-5">
-          <p className="text-chalk/90">Pas de mot de passe : on t'envoie un lien par e-mail.</p>
           <Field
             label="Adresse e-mail"
             type="email"
@@ -55,11 +108,38 @@ export default function Login() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
+          <div>
+            <PasswordField
+              label="Mot de passe"
+              required
+              minLength={signup ? 8 : undefined}
+              autoComplete={signup ? "new-password" : "current-password"}
+              hint={signup ? "8 caractères minimum" : undefined}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            {!signup && (
+              <button
+                type="button"
+                onClick={forgot}
+                disabled={busy}
+                className="mt-1 min-h-11 text-sm underline underline-offset-4 disabled:opacity-60"
+              >
+                Mot de passe oublié ?
+              </button>
+            )}
+          </div>
           {error && <ErrorBox message={error} />}
-          <ChalkButton type="submit" disabled={sending} className="w-full">
-            {sending ? "Envoi…" : "Recevoir le lien"}
+          <ChalkButton type="submit" disabled={busy} className="w-full">
+            {busy ? "Un instant…" : signup ? "Créer mon compte" : "Se connecter"}
             <ArrowRight className="size-5" />
           </ChalkButton>
+          <p className="text-center text-sm text-chalk/90">
+            {signup ? "Déjà un compte ?" : "Pas encore de compte ?"}{" "}
+            <button type="button" onClick={switchMode} className="min-h-11 font-bold underline underline-offset-4">
+              {signup ? "Se connecter" : "Créer un compte"}
+            </button>
+          </p>
         </form>
       )}
 
