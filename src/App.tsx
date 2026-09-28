@@ -5,6 +5,7 @@ import AdminHome from "@/pages/admin/AdminHome"
 import AdminTournament from "@/pages/admin/AdminTournament"
 import Landing from "@/pages/Landing"
 import Login from "@/pages/Login"
+import NewPassword from "@/pages/NewPassword"
 import Profile from "@/pages/Profile"
 import TournamentPage from "@/pages/Tournament"
 import Tournaments from "@/pages/Tournaments"
@@ -16,6 +17,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/connexion" element={<Login />} />
+        <Route path="/nouveau-mot-de-passe" element={<NewPassword />} />
         <Route path="/bienvenue" element={<Protected onboarding><Welcome /></Protected>} />
         <Route path="/tournois" element={<Protected><Tournaments /></Protected>} />
         <Route path="/tournois/:id" element={<Protected><TournamentPage /></Protected>} />

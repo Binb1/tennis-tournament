@@ -1,5 +1,6 @@
-import type { ComponentProps, ReactNode } from "react"
+import { useState, type ComponentProps, type ReactNode } from "react"
 import { Link, NavLink } from "react-router-dom"
+import { Eye, EyeOff } from "lucide-react"
 
 import { BallMark } from "@/components/court/BallMark"
 import { SurfaceMenu } from "@/components/court/SurfacePicker"
@@ -137,6 +138,35 @@ export function Field({ label, hint, ...props }: ComponentProps<"input"> & { lab
       />
       {hint && <span className="mt-1.5 block text-xs text-chalk/75">{hint}</span>}
     </label>
+  )
+}
+
+/** Password input with a show/hide toggle, same look as Field. */
+export function PasswordField({ label, hint, ...props }: Omit<ComponentProps<"input">, "type"> & { label: string; hint?: string }) {
+  const [visible, setVisible] = useState(false)
+  return (
+    <div>
+      <label className="block">
+        <span className="micro-label mb-2">{label}</span>
+        <span className="relative block">
+          <input
+            type={visible ? "text" : "password"}
+            className="h-12 w-full rounded-[2px] border-2 border-chalk/90 bg-brick/25 pr-12 pl-3 text-base text-chalk placeholder:text-chalk/50 focus:bg-brick/40 focus:outline-none"
+            {...props}
+          />
+          <button
+            type="button"
+            onClick={() => setVisible((v) => !v)}
+            aria-label={visible ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+            aria-pressed={visible}
+            className="absolute inset-y-0 right-0 inline-flex w-12 items-center justify-center text-chalk/80 hover:text-chalk"
+          >
+            {visible ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
+          </button>
+        </span>
+      </label>
+      {hint && <span className="mt-1.5 block text-xs text-chalk/75">{hint}</span>}
+    </div>
   )
 }
 
