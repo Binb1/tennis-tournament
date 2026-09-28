@@ -34,9 +34,9 @@ async function api(key: string, path: string) {
 const norm = (s: string) =>
   s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/\s+/g, " ").trim()
 
-/** Full singles draw (all main rounds, bracket slots, results). */
+/** Full singles draw (all main rounds, bracket slots, results). Path order: tournament/{tour}/{id}/{year}/draws. */
 const fetchDraw = (key: string, t: Tournament) =>
-  api(key, `${t.tour.toLowerCase()}/tournament/${t.external_id}/${new Date(t.starts_at ?? Date.now()).getUTCFullYear()}/draws?includeAll=true`)
+  api(key, `tournament/${t.tour.toLowerCase()}/${t.external_id}/${new Date(t.starts_at ?? Date.now()).getUTCFullYear()}/draws?includeAll=true`)
 
 /** Player lookup: API id first, then normalized name. */
 function playerFinder(players: { id: string; name: string; external_id: string | null }[]) {
@@ -84,7 +84,7 @@ async function importDraw(db: Db, key: string, tournamentId: string) {
   try {
     const tour = t.tour.toLowerCase()
     // Draws (all rounds, slots, seeds, countries); fixtures + results only if it fails or is empty.
-    const d = await fetchDraw(key, t).catch(() => null)
+    const d = await fetchDraw(key, t).catch((e) => (console.error("draws failed, fallback:", e), null))
     const draw = d?.singles?.length ? d : null
     const sources = draw ? [draw] : [
       await api(key, `${tour}/fixtures/tournament/${t.external_id}`),
@@ -165,7 +165,7 @@ Deno.serve(async (req) => {
         db.from("rounds").select("id, idx").eq("tournament_id", t.id),
       ])
       // Draws: 1 call for both matches and player_results. Results endpoint only if draws fails.
-      const d = await fetchDraw(apiKey, t).catch(() => null)
+      const d = await fetchDraw(apiKey, t).catch((e) => (console.error("draws failed, fallback:", e), null))
       const draw = d?.singles?.length ? d : null
       const matches: ApiMatch[] = draw
         ? drawResults(await upsertMatches(db, t, draw))
