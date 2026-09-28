@@ -119,7 +119,7 @@ export function parseDrawMatches(body: Raw, n: number): Slot[] {
       winner: status === "done" ? player1 : null,
       score,
       status,
-      scheduled_at: m.startTime ?? m.date ?? null,
+      scheduled_at: m.startTime || m.date || null, // the API sends "" when unknown
     })
   }
   return out
