@@ -210,9 +210,28 @@ export function Tag({ tone, children }: { tone: "alive" | "out" | "win" | "neutr
   )
 }
 
-/** A tennis player's result in one round, as a tag: Qualifié / Éliminé / À jouer. */
+/**
+ * A tennis player's result in one round: Qualifié / Éliminé / À jouer.
+ * Passive label (dot + text), so it never looks like a button.
+ */
 export function ResultTag({ result }: { result: "won" | "lost" | null | undefined }) {
-  if (result === "won") return <Tag tone="alive">Qualifié</Tag>
-  if (result === "lost") return <Tag tone="out">Éliminé</Tag>
-  return <Tag tone="neutral">À jouer</Tag>
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1.5 text-[10px] font-bold tracking-[0.1em] whitespace-nowrap uppercase [font-stretch:85%]",
+        result === "lost" ? "text-chalk/70" : "text-chalk/90",
+      )}
+    >
+      <span
+        aria-hidden="true"
+        className={cn(
+          "size-2 rounded-full",
+          result === "won" && "bg-ball",
+          result === "lost" && "bg-ink/70",
+          !result && "border border-chalk/80",
+        )}
+      />
+      {result === "won" ? "Qualifié" : result === "lost" ? "Éliminé" : "À jouer"}
+    </span>
+  )
 }

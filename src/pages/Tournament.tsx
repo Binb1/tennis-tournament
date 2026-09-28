@@ -396,18 +396,29 @@ function MyPick({ data, d, onChanged }: { data: Data; d: Derived; onChanged: () 
                       aria-pressed={selected}
                       className={cn(
                         "flex min-h-12 w-full items-center gap-3 px-3 py-2.5 text-left transition-colors",
-                        selected ? "bg-chalk text-ink" : "hover:bg-chalk/10",
+                        selected ? "bg-chalk text-clay" : "hover:bg-chalk/10",
                         why && "cursor-not-allowed opacity-55",
                       )}
                     >
-                      <span className="w-7 shrink-0 text-xs font-bold opacity-70 tabular-nums">
+                      <span className={cn("w-7 shrink-0 text-xs font-bold tabular-nums", !selected && "opacity-70")}>
                         {p.seed ? `[${p.seed}]` : ""}
                       </span>
-                      <span className={cn("min-w-0 flex-1 truncate font-medium", why && "line-through decoration-1")}>
+                      <span
+                        className={cn(
+                          "min-w-0 flex-1 truncate",
+                          selected ? "font-bold" : "font-medium",
+                          why && "line-through decoration-1",
+                        )}
+                      >
                         {p.name}
                       </span>
                       {why && <span className="shrink-0 text-xs">{why}</span>}
-                      {selected && <Tag tone="alive">Mon choix</Tag>}
+                      {selected && (
+                        // Inverted tag on the chalk row: surface colour fill, chalk text.
+                        <span className="shrink-0 rounded-[2px] bg-clay px-2 py-0.5 text-[11px] font-bold tracking-[0.12em] whitespace-nowrap text-chalk uppercase [font-stretch:85%]">
+                          Mon choix
+                        </span>
+                      )}
                       {saving === p.id && <span className="shrink-0 text-xs">…</span>}
                     </button>
                   </li>

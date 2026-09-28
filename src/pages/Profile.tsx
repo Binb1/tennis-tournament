@@ -2,10 +2,18 @@ import { useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { ChevronRight } from "lucide-react"
 
-import { SurfacePicker } from "@/components/court/SurfacePicker"
-import { AppShell, Box, ErrorBox, LineButton, Loading, PageTitle, Tag } from "@/components/court/AppShell"
+import { AppShell, Box, ErrorBox, LineButton, Loading, PageTitle, ResultTag, Tag } from "@/components/court/AppShell"
 import { useAuth } from "@/lib/auth"
-import { displayName, fetchWinners, formatDate, supabase, type EntryStatus, type Tournament } from "@/lib/supabase"
+import {
+  displayName,
+  fetchLastPicks,
+  fetchWinners,
+  formatDate,
+  supabase,
+  type EntryStatus,
+  type LastPick,
+  type Tournament,
+} from "@/lib/supabase"
 import { MyState } from "@/pages/Tournaments"
 
 type Row = { id: string; tournaments: Tournament | null }
@@ -16,6 +24,7 @@ export default function Profile() {
   const [rows, setRows] = useState<Row[] | null>(null)
   const [statuses, setStatuses] = useState<Record<string, EntryStatus>>({})
   const [winners, setWinners] = useState<Set<string>>(new Set())
+  const [lastPicks, setLastPicks] = useState<Record<string, LastPick>>({})
   const [error, setError] = useState<string | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -31,7 +40,9 @@ export default function Profile() {
       const rows = e.data as unknown as Row[]
       const finished = rows.filter((r) => r.tournaments?.status === "finished").map((r) => r.tournaments!.id)
       try {
-        setWinners(await fetchWinners(finished))
+        const [w, p] = await Promise.all([fetchWinners(finished), fetchLastPicks(rows.map((r) => r.id))])
+        setWinners(w)
+        setLastPicks(p)
       } catch (err) {
         return setError((err as Error).message)
       }
@@ -76,6 +87,7 @@ export default function Profile() {
             {rows.map((r) => {
               const t = r.tournaments
               const s = statuses[r.id]
+              const last = lastPicks[r.id]
               if (!t) return null
               return (
                 <li key={r.id} className="border-t-2 border-chalk/50 first:border-t-0">
@@ -86,6 +98,13 @@ export default function Profile() {
                         {formatDate(t.starts_at)}
                         {s && s.rounds_survived > 0 && ` · ${s.rounds_survived} ${s.rounds_survived > 1 ? "tours passés" : "tour passé"}`}
                       </p>
+                      {last && (
+                        <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs">
+                          <span className="text-chalk/85">Ton choix · {last.roundName} :</span>
+                          <span className="font-bold">{last.player}</span>
+                          <ResultTag result={last.result} />
+                        </p>
+                      )}
                     </div>
                     {s ? <MyState status={t.status} me={s} winner={winners.has(r.id)} /> : <Tag tone="neutral">Inscrit</Tag>}
                     <ChevronRight className="size-4 shrink-0 text-chalk/70" />
@@ -95,11 +114,6 @@ export default function Profile() {
             })}
           </ul>
         )}
-      </section>
-
-      <section className="mb-10">
-        <h2 className="micro-label mb-3">Surface</h2>
-        <SurfacePicker />
       </section>
 
       <LineButton onClick={signOut} className="w-full">
