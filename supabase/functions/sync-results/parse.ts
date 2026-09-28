@@ -21,8 +21,9 @@ export function roundIdx(apiRound: number, n: number): number | null {
   return idx
 }
 
+const PLACEHOLDER = /^(tbd|qualifier|bye|unknown)\b/i // "Unknown Player" (id 3700) = qualifier not known yet
 const side = (p: Raw): Side | null =>
-  p?.id != null && p?.name ? { name: String(p.name), external_id: String(p.id) } : null
+  p?.id != null && p?.name && !PLACEHOLDER.test(p.name) ? { name: String(p.name), external_id: String(p.id) } : null
 
 /** Finished singles matches from GET {tour}/tournament/results/{id}, plus inferred walkover wins. */
 export function parseResults(body: Raw, n: number): ApiMatch[] {
@@ -50,27 +51,93 @@ export function inferWalkovers(matches: ApiMatch[]): ApiMatch[] {
   return out
 }
 
-export type DrawPlayer = { name: string; external_id: string; seed: number | null }
+export type DrawPlayer = { name: string; external_id: string; seed: number | null; country: string | null }
+
+/** Singles matches of any payload: draws {singles}, results {data: {singles}}, fixtures {data: []}. */
+const singles = (body: Raw): Raw[] =>
+  Array.isArray(body?.data) ? body.data : body?.data?.singles ?? body?.singles ?? []
+
+/** "7WC" -> 7, "WC"/"q"/null -> null. */
+const seedOf = (seed: unknown) => parseInt(String(seed)) || null
+const country = (p: Raw) => (/^[A-Z]{3}$/.test(p?.countryAcr ?? "") ? p.countryAcr : null)
 
 /**
- * Main-draw players: everyone in a main-round match (roundId >= 4) of the fixtures and of the results.
- * All main rounds, not only the first, so seeds with a bye and players whose R1 is already played are included.
+ * Main-draw players: everyone in a main-round match (roundId >= 4) of the given payloads
+ * (draws, or fixtures + results). All main rounds, so seeds with a bye and players whose R1 is played are included.
  */
-export function parseDraw(fixtures: Raw, results: Raw): DrawPlayer[] {
+export function parseDraw(...bodies: Raw[]): DrawPlayer[] {
   const byId = new Map<string, DrawPlayer>()
   const add = (p: Raw, seed: unknown) => {
     const s = side(p)
-    if (!s || /^(tbd|qualifier|bye)\b/i.test(s.name)) return
-    const seedNum = Number(seed) || null
+    if (!s) return
     const cur = byId.get(s.external_id)
-    if (cur) cur.seed ??= seedNum
-    else byId.set(s.external_id, { ...s, seed: seedNum })
+    if (cur) {
+      cur.seed ??= seedOf(seed)
+      cur.country ??= country(p)
+    } else byId.set(s.external_id, { ...s, seed: seedOf(seed), country: country(p) })
   }
-  const matches = [...(fixtures?.data ?? []), ...(results?.data?.singles ?? [])]
-  for (const m of matches) {
+  for (const m of bodies.flatMap(singles)) {
     if (Number(m.roundId) < MAIN_FIRST_ROUND) continue
     add(m.player1, m.seed1)
     add(m.player2, m.seed2)
   }
   return [...byId.values()]
+}
+
+export type Slot = {
+  external_id: string // "<api roundId>-<draw slot>"
+  round_idx: number
+  position: number | null // bracket slot in the round, 1 = top; slot p is fed by 2p-1 and 2p
+  player1: Side | null
+  player2: Side | null
+  winner: Side | null
+  score: string | null
+  status: "scheduled" | "live" | "done"
+  scheduled_at: string | null
+}
+
+/**
+ * Main-round matches of GET {tour}/tournament/{id}/{year}/draws. Later rounds appear once both players are known.
+ * A finished match has a non-empty result, and its player1 is the winner (checked on all 124 French Open 2026
+ * matches against the results endpoint's match_winner). Walkovers are present, with result "w/o".
+ */
+export function parseDrawMatches(body: Raw, n: number): Slot[] {
+  const out: Slot[] = []
+  for (const m of body?.singles ?? []) {
+    const idx = roundIdx(Number(m.roundId), n)
+    if (!idx) continue
+    const position = Number(m.draw) > 0 ? Number(m.draw) : null
+    const player1 = side(m.player1), player2 = side(m.player2)
+    const score = m.result ? String(m.result) : null
+    const status = score ? "done" : m.live ? "live" : "scheduled"
+    out.push({
+      external_id: `${m.roundId}-${position ?? `${m.player1Id}-${m.player2Id}`}`,
+      round_idx: idx,
+      position,
+      player1,
+      player2,
+      winner: status === "done" ? player1 : null,
+      score,
+      status,
+      scheduled_at: m.startTime ?? m.date ?? null,
+    })
+  }
+  return out
+}
+
+/** Finished draw matches in the parseResults shape (for player_results), plus inferred walkovers. */
+export function drawResults(slots: Slot[]): ApiMatch[] {
+  const out: ApiMatch[] = []
+  for (const s of slots) {
+    if (s.status !== "done" || !s.player1) continue
+    out.push({ round_idx: s.round_idx, winner: s.player1, loser: s.player2 })
+  }
+  return [...out, ...inferWalkovers(out)]
+}
+
+/** GET {tour}/ranking/singles?pageSize=500 -> Map(player external_id -> rank). */
+export function parseRankings(body: Raw): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const r of body?.data ?? []) if (r?.player?.id != null && r.position > 0) out.set(String(r.player.id), Number(r.position))
+  return out
 }

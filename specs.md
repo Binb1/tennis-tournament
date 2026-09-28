@@ -135,7 +135,8 @@ Nine tables (including `profiles_private`) and one view. Survival is never store
 | profiles | id (= auth.users.id), username unique, is_admin bool | Created on first login; personal fields in profiles_private (owner-only) |
 | tournaments | id, name, tour, draw_size, status enum, starts_at, external_id | status: draft, registration, live, finished |
 | rounds | id, tournament_id, idx (1..n), name, locks_at | unique(tournament_id, idx) |
-| players | id, tournament_id, name, seed, external_id | The draw |
+| players | id, tournament_id, name, seed, external_id, country (FRA, GER…), ranking | The draw; country + ranking set by the API import |
+| matches | id, tournament_id, round_id, external_id, player1_id, player2_id, winner_id, scheduled_at, score, status (scheduled, live, done), position | One row per bracket slot, API only. position 1 = top; slot p of round k+1 is fed by slots 2p-1 and 2p of round k |
 | player_results | player_id, round_id, result (won, lost), status (scheduled, live, done), source (manual, api), updated_at | PK(player_id, round_id); status optional, for the live dot |
 | entries | id, tournament_id, user_id, joined_at | unique(tournament_id, user_id) |
 | picks | entry_id, round_id, player_id, updated_at | unique(entry_id, round_id), unique(entry_id, player_id) |
@@ -184,7 +185,7 @@ The app only needs who advanced each round — no scores, sets or live feed. Man
 ### Flow
 
 1. pg_cron calls the Edge Function `sync-results` every 30 min while a tournament is live.
-2. The function fetches finished matches for the tournament's `external_id`.
+2. The function fetches the singles draw for the tournament's `external_id` (`{tour}/tournament/{id}/{year}/draws`, 1 call: every main-round match with bracket slot, score, player country). It upserts `matches`. Fallback when the draw is empty or fails: `{tour}/tournament/results/{id}`. The draw import also calls `{tour}/ranking/singles?pageSize=500` once for `players.ranking`.
 3. Map both players by `players.external_id` (fallback: normalized name; unmatched names go to the admin sync panel).
 4. Upsert `player_results` (won / lost, source = api). Never overwrite a row the admin set manually.
 5. Optional: write status = live for matches in progress (live dot).
