@@ -35,11 +35,12 @@ export function AppShell({ children, bare = false }: { children: ReactNode; bare
  * then a thin band in the tournament colours. Wordmark stays in Shrikhand (brand).
  */
 export function SiteHeader({ children }: { children?: ReactNode }) {
+  const { session } = useAuth()
   return (
     <header className="relative z-20">
       <div className="wall">
         <div className="mx-auto flex max-w-[600px] items-center justify-between gap-2 px-4 py-1.5 md:py-4">
-          <Link to="/" className="flex min-h-11 shrink-0 items-center gap-2 font-brand text-lg leading-none min-[400px]:text-xl">
+          <Link to={session ? "/tournois" : "/"} className="flex min-h-11 shrink-0 items-center gap-2 font-brand text-lg leading-none min-[400px]:text-xl">
             <BallMark />
             Tiebreakers
           </Link>
