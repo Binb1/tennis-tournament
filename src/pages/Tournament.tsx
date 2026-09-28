@@ -968,7 +968,9 @@ function Draw({ data, d }: { data: Data; d: Derived }) {
                 </ChipButton>
               ))}
             </div>
+            {/* Keyed by the start round: a new start remounts the box, so it starts scrolled to the left. */}
             <Bracket
+              key={from}
               rounds={data.rounds.slice(from)}
               matches={data.matches}
               playerById={d.playerById}
