@@ -32,7 +32,30 @@ export type Tournament = {
 }
 
 export type Round = { id: string; tournament_id: string; idx: number; name: string; locks_at: string }
-export type Player = { id: string; name: string; seed: number | null }
+export type Player = {
+  id: string
+  name: string
+  seed: number | null
+  /** 3-letter country code as the API gives it (FRA, GER, SUI…), migration 0005. */
+  country?: string | null
+  /** World ranking, migration 0005. */
+  ranking?: number | null
+}
+/** One bracket slot of a main round (migration 0005). Slot p of round k+1 is fed by slots 2p-1 and 2p of round k. */
+export type Match = {
+  id: string
+  tournament_id: string
+  round_id: string
+  external_id: string
+  player1_id: string | null
+  player2_id: string | null
+  winner_id: string | null
+  scheduled_at: string | null
+  /** Winner's score first: "6-4 3-6 7-6(5)", "w/o". */
+  score: string | null
+  status: "scheduled" | "live" | "done"
+  position: number | null
+}
 export type PlayerResult = { player_id: string; round_id: string; result: "won" | "lost" | null }
 export type Pick = { entry_id: string; round_id: string; player_id: string }
 export type EntryStatus = {

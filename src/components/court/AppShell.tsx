@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils"
 export function AppShell({ children, bare = false }: { children: ReactNode; bare?: boolean }) {
   const { profile } = useAuth()
   return (
-    <div className="page-surface min-h-svh overflow-x-clip pb-16 text-chalk">
+    <div className="page-surface flex min-h-svh flex-col overflow-x-clip text-chalk">
       <SiteHeader>
         {!bare && (
           <nav className="flex gap-3 text-sm font-medium min-[400px]:gap-4">
@@ -25,7 +25,8 @@ export function AppShell({ children, bare = false }: { children: ReactNode; bare
           </nav>
         )}
       </SiteHeader>
-      <main className="mx-auto max-w-[600px] px-4 pt-5 md:pt-8">{children}</main>
+      <main className="mx-auto w-full max-w-[600px] flex-1 px-4 pt-5 pb-16 md:pt-8">{children}</main>
+      <SiteFooter />
     </div>
   )
 }
@@ -52,6 +53,18 @@ export function SiteHeader({ children }: { children?: ReactNode }) {
       </div>
       <div aria-hidden="true" className="wall-band" />
     </header>
+  )
+}
+
+/** The stadium's far wall, mirrored at the bottom: the tournament band, then the wall. */
+export function SiteFooter({ className }: { className?: string }) {
+  return (
+    <footer className={cn("relative z-10", className)}>
+      <div aria-hidden="true" className="wall-band rotate-180" />
+      <div className="wall flex h-16 items-center justify-center">
+        <span className="font-brand text-sm leading-none opacity-45">Tiebreakers</span>
+      </div>
+    </footer>
   )
 }
 
