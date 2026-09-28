@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, type FormEvent } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { ChevronRight } from "lucide-react"
 
-import { AppShell, Box, ErrorBox, LineButton, Loading, PageTitle, ResultTag, Tag } from "@/components/court/AppShell"
+import { AppShell, Box, ChalkButton, ErrorBox, LineButton, Loading, PageTitle, ResultTag, Tag } from "@/components/court/AppShell"
 import { useAuth } from "@/lib/auth"
 import {
   displayName,
@@ -15,6 +15,74 @@ import {
   type Tournament,
 } from "@/lib/supabase"
 import { MyState } from "@/pages/Tournaments"
+import { HandleField, SocialLinks, parseSocials } from "@/components/court/Socials"
+
+/** Public X / Instagram handles: shown as links, editable in place. */
+function SocialsEditor() {
+  const { session, profile, refreshProfile } = useAuth()
+  const [editing, setEditing] = useState(false)
+  const [form, setForm] = useState({ x: "", instagram: "" })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const hasAny = !!(profile?.x_handle || profile?.instagram_handle)
+
+  function open() {
+    setForm({ x: profile?.x_handle ?? "", instagram: profile?.instagram_handle ?? "" })
+    setError(null)
+    setEditing(true)
+  }
+
+  async function save(e: FormEvent) {
+    e.preventDefault()
+    if (!session) return
+    const parsed = parseSocials(form)
+    if (!parsed.ok) return setError(parsed.error)
+    setSaving(true)
+    setError(null)
+    const { error } = await supabase.from("profiles").update(parsed.value).eq("id", session.user.id)
+    if (error) {
+      setSaving(false)
+      return setError(error.message)
+    }
+    await refreshProfile()
+    setSaving(false)
+    setEditing(false)
+  }
+
+  if (!editing)
+    return (
+      <div className="mt-2 flex flex-wrap items-center gap-x-5">
+        <SocialLinks p={profile} />
+        <button onClick={open} className="min-h-11 text-sm text-chalk/85 underline underline-offset-4 hover:text-chalk">
+          {hasAny ? "Modifier mes réseaux" : "Ajouter X / Instagram"}
+        </button>
+      </div>
+    )
+
+  return (
+    <form onSubmit={save} className="mt-4 space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <HandleField label="X (Twitter)" placeholder="facultatif" value={form.x} onChange={(e) => setForm({ ...form, x: e.target.value })} />
+        <HandleField
+          label="Instagram"
+          placeholder="facultatif"
+          value={form.instagram}
+          onChange={(e) => setForm({ ...form, instagram: e.target.value })}
+        />
+      </div>
+      <p className="text-xs text-chalk/75">Public : un lien apparaît à côté de ton pseudo dans les classements. Laisse vide pour retirer.</p>
+      {error && <ErrorBox message={error} />}
+      <div className="grid grid-cols-2 gap-3">
+        <LineButton type="button" onClick={() => setEditing(false)} disabled={saving}>
+          Annuler
+        </LineButton>
+        <ChalkButton type="submit" disabled={saving}>
+          {saving ? "Enregistrement…" : "Enregistrer"}
+        </ChalkButton>
+      </div>
+    </form>
+  )
+}
 
 type Row = { id: string; tournaments: Tournament | null }
 
@@ -71,7 +139,10 @@ export default function Profile() {
   return (
     <AppShell>
       <PageTitle eyebrow="Profil">{displayName(profile)}</PageTitle>
-      <p className="-mt-2 mb-8 text-sm text-chalk/85">{session?.user.email}</p>
+      <p className="-mt-2 text-sm text-chalk/85">{session?.user.email}</p>
+      <div className="mb-8">
+        <SocialsEditor />
+      </div>
 
       <section className="mb-10">
         <h2 className="micro-label mb-3">Mes tournois</h2>

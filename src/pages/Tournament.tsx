@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom"
 import { ArrowLeft, Search } from "lucide-react"
 
 import { AppShell, Box, ChalkButton, ErrorBox, Loading, PageTitle, ResultTag, Tag } from "@/components/court/AppShell"
+import { SocialIcons } from "@/components/court/Socials"
 import { useAuth } from "@/lib/auth"
 import { useThemeOverride } from "@/lib/theme"
 import { formatLeft, useNow } from "@/lib/time"
@@ -21,7 +22,11 @@ import {
   type Tournament,
 } from "@/lib/supabase"
 
-type EntryRow = { id: string; user_id: string | null; profiles: { username: string; deleted_at: string | null } | null }
+type EntryRow = {
+  id: string
+  user_id: string | null
+  profiles: { username: string; deleted_at: string | null; x_handle?: string | null; instagram_handle?: string | null } | null
+}
 type Data = {
   t: Tournament
   rounds: Round[]
@@ -48,7 +53,7 @@ async function load(id: string): Promise<Data> {
       supabase.from("player_results").select("player_id, round_id, result").in("round_id", roundIds).order("player_id").order("round_id").range(a, b),
     ),
     fetchAll<EntryRow>((a, b) =>
-      supabase.from("entries").select("id, user_id, profiles(username, deleted_at)").eq("tournament_id", id).order("joined_at").order("id").range(a, b),
+      supabase.from("entries").select("id, user_id, profiles(username, deleted_at, x_handle, instagram_handle)").eq("tournament_id", id).order("joined_at").order("id").range(a, b),
     ),
     fetchAll<EntryStatus>((a, b) => supabase.from("entry_status").select("*").eq("tournament_id", id).order("entry_id").range(a, b)),
     fetchAll<Pick>((a, b) =>
@@ -556,19 +561,30 @@ function Leaderboard({ data, d, uid }: { data: Data; d: Derived; uid?: string })
           const me = !!uid && r.e.user_id === uid
           return (
             <li key={r.e.id} className="border-t-2 border-chalk/50 first:border-t-0">
-              <button
+              {/* div role=button: the row holds social links, and <a> can't nest in <button>. */}
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => setHighlight(on ? null : r.e.id)}
+                onKeyDown={(ev) => {
+                  if (ev.target !== ev.currentTarget || (ev.key !== "Enter" && ev.key !== " ")) return
+                  ev.preventDefault()
+                  setHighlight(on ? null : r.e.id)
+                }}
                 aria-expanded={on}
                 className={cn(
-                  "w-full px-3 py-3 text-left transition-colors",
+                  "w-full cursor-pointer px-3 py-3 text-left transition-colors",
                   on ? "bg-brick/75 shadow-[inset_4px_0_0_var(--color-chalk)]" : me ? "bg-brick/35 hover:bg-brick/50" : "hover:bg-chalk/10",
                 )}
               >
                 <div className="flex items-center gap-3">
                   <span className="w-6 shrink-0 text-sm font-bold tabular-nums">{r.rank}</span>
-                  <span className="min-w-0 flex-1 truncate font-medium">
-                    {r.name}
-                    {me && <span className="ml-1.5 text-xs opacity-75">(moi)</span>}
+                  <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                    <span className="min-w-0 truncate font-medium">
+                      {r.name}
+                      {me && <span className="ml-1.5 text-xs opacity-75">(moi)</span>}
+                    </span>
+                    {!r.e.profiles?.deleted_at && <SocialIcons p={r.e.profiles} />}
                   </span>
                   {isWinner(r) ? (
                     <Tag tone="win">{winnerCount > 1 ? "Co-vainqueur" : "Vainqueur"}</Tag>
@@ -585,7 +601,7 @@ function Leaderboard({ data, d, uid }: { data: Data; d: Derived; uid?: string })
                     ))}
                   </div>
                 )}
-              </button>
+              </div>
             </li>
           )
         })}

@@ -5,11 +5,12 @@ import { ArrowRight } from "lucide-react"
 import { AppShell, ChalkButton, ErrorBox, Field, PageTitle } from "@/components/court/AppShell"
 import { useAuth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
+import { HandleField, parseSocials } from "@/components/court/Socials"
 
 export default function Welcome() {
   const { session, refreshProfile } = useAuth()
   const navigate = useNavigate()
-  const [form, setForm] = useState({ username: "", ranking: "", region: "", city: "", country: "France" })
+  const [form, setForm] = useState({ username: "", ranking: "", region: "", city: "", country: "France", x: "", instagram: "" })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -23,10 +24,17 @@ export default function Welcome() {
       setError("Le pseudo doit faire entre 3 et 30 caractères.")
       return
     }
+    const socials = parseSocials(form)
+    if (!socials.ok) {
+      setError(socials.error)
+      return
+    }
     setSaving(true)
     setError(null)
     const id = session.user.id
-    const { error: e1 } = await supabase.from("profiles").upsert({ id, username })
+    // Handles are only sent when filled (new rows default to null).
+    const handles = Object.fromEntries(Object.entries(socials.value).filter(([, v]) => v))
+    const { error: e1 } = await supabase.from("profiles").upsert({ id, username, ...handles })
     if (e1) {
       setSaving(false)
       setError(e1.code === "23505" ? "Ce pseudo est déjà pris, choisis-en un autre." : e1.message)
@@ -63,6 +71,11 @@ export default function Welcome() {
           onChange={set("username")}
           hint="Public, visible dans les classements."
         />
+        <div className="grid grid-cols-2 gap-4">
+          <HandleField label="X (Twitter)" placeholder="facultatif" value={form.x} onChange={set("x")} />
+          <HandleField label="Instagram" placeholder="facultatif" value={form.instagram} onChange={set("instagram")} />
+        </div>
+        <p className="-mt-3 text-xs text-chalk/75">Facultatif et public : un lien apparaît à côté de ton pseudo.</p>
         <div className="border-t-2 border-chalk/60 pt-5">
           <p className="mb-4 text-sm text-chalk/85">Privé, visible par toi seul.</p>
           <div className="space-y-5">

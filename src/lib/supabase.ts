@@ -13,6 +13,10 @@ export type Profile = {
   username: string
   is_admin: boolean
   deleted_at: string | null
+  /** Public X (Twitter) handle, without "@" (migration 0006). */
+  x_handle?: string | null
+  /** Public Instagram handle, without "@" (migration 0006). */
+  instagram_handle?: string | null
 }
 
 export type Tournament = {
@@ -45,6 +49,25 @@ export function displayName(p: { username: string; deleted_at: string | null } |
   if (!p || p.deleted_at) return "utilisateur supprimé"
   return p.username
 }
+
+export type Socials = { x_handle?: string | null; instagram_handle?: string | null }
+
+/**
+ * Normalise a social handle typed by a user: trims, strips a leading "@" and full profile URLs
+ * (https://x.com/name, twitter.com/name, instagram.com/name/…). Returns null when empty.
+ */
+export function normaliseHandle(input: string): string | null {
+  let h = input.trim()
+  const url = h.match(/^(?:https?:\/\/)?(?:www\.|mobile\.|m\.)?(?:x|twitter|instagram)\.com\/(.*)$/i)
+  if (url) h = url[1]
+  h = h.split(/[/?#]/)[0].replace(/^@+/, "").trim()
+  return h || null
+}
+
+export const HANDLE_RE = /^[A-Za-z0-9_.]{1,30}$/
+
+export const xUrl = (h: string) => `https://x.com/${h}`
+export const instagramUrl = (h: string) => `https://instagram.com/${h}`
 
 /** Fetch every row of a query past the 1000-row API cap. */
 export async function fetchAll<T>(
