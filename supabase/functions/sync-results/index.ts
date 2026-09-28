@@ -56,7 +56,10 @@ async function upsertMatches(db: Db, t: Tournament, draw: unknown): Promise<Slot
   const slots = parseDrawMatches(draw, (rounds ?? []).length)
   // The API can list a slot twice (e.g. byes in 96/56 draws): keep one row per slot, a finished match first.
   const bySlot = new Map<string, Slot>()
-  for (const s of slots) if (bySlot.get(s.external_id)?.status !== "done") bySlot.set(s.external_id, s)
+  for (const s of slots) {
+    if (s.position == null) continue // bye entries without a slot
+    if (bySlot.get(s.external_id)?.status !== "done") bySlot.set(s.external_id, s)
+  }
   const rows = [...bySlot.values()].filter((s) => roundByIdx.has(s.round_idx)).map((s) => ({
     tournament_id: t.id,
     round_id: roundByIdx.get(s.round_idx),
