@@ -13,6 +13,10 @@ export type Profile = {
   username: string
   is_admin: boolean
   deleted_at: string | null
+  /** Public X (Twitter) handle, without "@" (migration 0006). */
+  x_handle?: string | null
+  /** Public Instagram handle, without "@" (migration 0006). */
+  instagram_handle?: string | null
 }
 
 export type Tournament = {
@@ -28,7 +32,30 @@ export type Tournament = {
 }
 
 export type Round = { id: string; tournament_id: string; idx: number; name: string; locks_at: string }
-export type Player = { id: string; name: string; seed: number | null }
+export type Player = {
+  id: string
+  name: string
+  seed: number | null
+  /** 3-letter country code as the API gives it (FRA, GER, SUI…), migration 0005. */
+  country?: string | null
+  /** World ranking, migration 0005. */
+  ranking?: number | null
+}
+/** One bracket slot of a main round (migration 0005). Slot p of round k+1 is fed by slots 2p-1 and 2p of round k. */
+export type Match = {
+  id: string
+  tournament_id: string
+  round_id: string
+  external_id: string
+  player1_id: string | null
+  player2_id: string | null
+  winner_id: string | null
+  scheduled_at: string | null
+  /** Winner's score first: "6-4 3-6 7-6(5)", "w/o". */
+  score: string | null
+  status: "scheduled" | "live" | "done"
+  position: number | null
+}
 export type PlayerResult = { player_id: string; round_id: string; result: "won" | "lost" | null }
 export type Pick = { entry_id: string; round_id: string; player_id: string }
 export type EntryStatus = {
@@ -45,6 +72,25 @@ export function displayName(p: { username: string; deleted_at: string | null } |
   if (!p || p.deleted_at) return "utilisateur supprimé"
   return p.username
 }
+
+export type Socials = { x_handle?: string | null; instagram_handle?: string | null }
+
+/**
+ * Normalise a social handle typed by a user: trims, strips a leading "@" and full profile URLs
+ * (https://x.com/name, twitter.com/name, instagram.com/name/…). Returns null when empty.
+ */
+export function normaliseHandle(input: string): string | null {
+  let h = input.trim()
+  const url = h.match(/^(?:https?:\/\/)?(?:www\.|mobile\.|m\.)?(?:x|twitter|instagram)\.com\/(.*)$/i)
+  if (url) h = url[1]
+  h = h.split(/[/?#]/)[0].replace(/^@+/, "").trim()
+  return h || null
+}
+
+export const HANDLE_RE = /^[A-Za-z0-9_.]{1,30}$/
+
+export const xUrl = (h: string) => `https://x.com/${h}`
+export const instagramUrl = (h: string) => `https://instagram.com/${h}`
 
 /** Fetch every row of a query past the 1000-row API cap. */
 export async function fetchAll<T>(
@@ -78,6 +124,42 @@ export async function fetchWinners(tournamentIds: string[]): Promise<Set<string>
     for (const r of list) if (anyAlive ? r.alive : r.rounds_survived === max) winners.add(r.entry_id)
   }
   return winners
+}
+
+export type LastPick = { roundId: string; roundIdx: number; roundName: string; player: string; result: "won" | "lost" | null }
+
+/** Latest pick (highest round) of each entry, with the player's result in that round. Keyed by entry id. */
+export async function fetchLastPicks(entryIds: string[]): Promise<Record<string, LastPick>> {
+  if (!entryIds.length) return {}
+  type Row = Pick & { players: { name: string } | null; rounds: { idx: number; name: string } | null }
+  const p = await supabase.from("picks").select("entry_id, round_id, player_id, players(name), rounds(idx, name)").in("entry_id", entryIds)
+  if (p.error) throw new Error(p.error.message)
+  const last: Record<string, Row> = {}
+  for (const row of p.data as unknown as Row[]) {
+    const cur = last[row.entry_id]
+    if (!cur || (row.rounds?.idx ?? 0) > (cur.rounds?.idx ?? 0)) last[row.entry_id] = row
+  }
+  const rows = Object.values(last)
+  if (!rows.length) return {}
+  const r = await supabase
+    .from("player_results")
+    .select("player_id, round_id, result")
+    .in("round_id", rows.map((x) => x.round_id))
+    .in("player_id", rows.map((x) => x.player_id))
+  if (r.error) throw new Error(r.error.message)
+  const result = new Map((r.data as PlayerResult[]).map((x) => [`${x.player_id}:${x.round_id}`, x.result]))
+  return Object.fromEntries(
+    rows.map((x) => [
+      x.entry_id,
+      {
+        roundId: x.round_id,
+        roundIdx: x.rounds?.idx ?? 0,
+        roundName: x.rounds?.name ?? "",
+        player: x.players?.name ?? "?",
+        result: result.get(`${x.player_id}:${x.round_id}`) ?? null,
+      },
+    ]),
+  )
 }
 
 export const STATUS_LABEL: Record<TournamentStatus, string> = {

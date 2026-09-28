@@ -651,11 +651,11 @@ function SyncSection({ data, onChanged }: Props) {
   )
 }
 
-/** Cron runs at every :00 and :30 (UTC-aligned), only while the tournament is live with an API id. */
+/** Cron runs hourly at :00 ('0 * * * *', UTC), only while the tournament is live with an API id. */
 function NextSync({ t }: { t: Tournament }) {
   const now = useNow(10_000)
-  const half = 30 * 60_000
-  const next = Math.floor(now / half) * half + half
+  const hour = 60 * 60_000
+  const next = Math.floor(now / hour) * hour + hour
   const paused =
     t.status !== "live" ? "tournoi pas en cours" : !t.external_id ? "pas d'ID Tennis API" : null
   return (

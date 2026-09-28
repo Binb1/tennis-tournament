@@ -2,11 +2,21 @@ import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import { ChevronRight } from "lucide-react"
 
-import { AppShell, Box, ErrorBox, Loading, PageTitle, Tag } from "@/components/court/AppShell"
+import { AppShell, Box, ErrorBox, Loading, PageTitle, ResultTag, Tag } from "@/components/court/AppShell"
 import { MiniCourt } from "@/components/court/SurfacePicker"
 import { useAuth } from "@/lib/auth"
 import { isThemeId, themeLabel } from "@/lib/theme"
-import { STATUS_LABEL, fetchWinners, formatDate, supabase, type EntryStatus, type Round, type Tournament } from "@/lib/supabase"
+import {
+  STATUS_LABEL,
+  fetchLastPicks,
+  fetchWinners,
+  formatDate,
+  supabase,
+  type EntryStatus,
+  type LastPick,
+  type Round,
+  type Tournament,
+} from "@/lib/supabase"
 import { formatLeft, useNow } from "@/lib/time"
 
 type Row = Tournament & { entries: { count: number }[] }
@@ -22,9 +32,9 @@ export default function Tournaments() {
   const [rows, setRows] = useState<Row[] | null>(null)
   const [mine, setMine] = useState<Record<string, EntryStatus>>({})
   const [winners, setWinners] = useState<Set<string>>(new Set())
-  // Open round per tournament (first round not locked yet) and the rounds I already picked in.
+  // Open round per tournament (first round not locked yet) and my latest pick per entry.
   const [openRound, setOpenRound] = useState<Record<string, Round>>({})
-  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [lastPicks, setLastPicks] = useState<Record<string, LastPick>>({})
   const now = useNow(30_000)
   const [error, setError] = useState<string | null>(null)
   const [reload, setReload] = useState(0)
@@ -46,15 +56,15 @@ export default function Tournaments() {
         const [w, r, p] = await Promise.all([
           fetchWinners(mine.filter((s) => finished.has(s.tournament_id)).map((s) => s.tournament_id)),
           supabase.from("rounds").select("*").in("tournament_id", playing).gt("locks_at", new Date().toISOString()).order("idx"),
-          supabase.from("picks").select("round_id").in("entry_id", mine.map((s) => s.entry_id)),
+          fetchLastPicks(mine.map((s) => s.entry_id)),
         ])
-        if (r.error || p.error) throw new Error((r.error ?? p.error)!.message)
+        if (r.error) throw new Error(r.error.message)
         if (!active) return
         setWinners(w)
         const open: Record<string, Round> = {}
         for (const round of r.data as Round[]) open[round.tournament_id] ??= round
         setOpenRound(open)
-        setPicked(new Set((p.data as { round_id: string }[]).map((x) => x.round_id)))
+        setLastPicks(p)
       } catch (err) {
         if (active) setError((err as Error).message)
         return
@@ -88,7 +98,7 @@ export default function Tournaments() {
                     me={mine[t.id]}
                     winners={winners}
                     round={openRound[t.id]}
-                    picked={picked}
+                    last={mine[t.id] ? lastPicks[mine[t.id].entry_id] : undefined}
                     now={now}
                   />
                 ))}
@@ -105,14 +115,14 @@ function TournamentCard({
   me,
   winners,
   round,
-  picked,
+  last,
   now,
 }: {
   t: Row
   me?: EntryStatus
   winners: Set<string>
   round?: Round
-  picked: Set<string>
+  last?: LastPick
   now: number
 }) {
   const count = t.entries[0]?.count ?? 0
@@ -126,7 +136,6 @@ function TournamentCard({
           <div className="flex flex-wrap items-center gap-2">
             <Tag tone="neutral">{STATUS_LABEL[t.status]}</Tag>
             {me && <MyState status={t.status} me={me} winner={winners.has(me.entry_id)} />}
-            {me?.alive && open && ms > 0 && !picked.has(open.id) && <Tag tone="alert">Pas de choix</Tag>}
           </div>
           <h3 className="mt-2 font-display text-2xl leading-tight [overflow-wrap:anywhere]">
             {isThemeId(t.theme) && (
@@ -144,10 +153,41 @@ function TournamentCard({
               {open.name} · verrouillage dans <span className="tabular-nums">{formatLeft(ms, false)}</span>
             </p>
           )}
+          {me && <MyPickLine me={me} last={last} open={open && ms > 0 ? open : undefined} />}
         </div>
         <ChevronRight className="size-5 shrink-0 text-chalk/80" />
       </Box>
     </Link>
+  )
+}
+
+/**
+ * My pick on a card: the open round's pick (or a "no pick yet" alert), else my latest pick.
+ * When I'm out without a pick in the fatal round, say so.
+ */
+export function MyPickLine({ me, last, open }: { me: EntryStatus; last?: LastPick; open?: Round }) {
+  if (me.alive && open && last?.roundId !== open.id) {
+    return (
+      <p role="status" className="mt-3 border-l-4 border-ball bg-ink/70 px-3 py-2 text-sm font-medium">
+        Pas encore de choix · {open.name}
+      </p>
+    )
+  }
+  if (!me.alive && last?.roundIdx !== me.eliminated_round) {
+    return (
+      <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 border-l-4 border-chalk bg-brick/40 px-3 py-2 text-sm">
+        <span>Aucun choix au verrouillage</span>
+        <ResultTag result="lost" />
+      </p>
+    )
+  }
+  if (!last) return null
+  return (
+    <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 border-l-4 border-chalk bg-brick/40 px-3 py-2 text-sm">
+      <span className="text-chalk/90">Ton choix · {last.roundName} :</span>
+      <strong className="font-bold">{last.player}</strong>
+      <ResultTag result={last.result} />
+    </p>
   )
 }
 

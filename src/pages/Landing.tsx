@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from "react"
 import { ArrowRight } from "lucide-react"
 import { Link } from "react-router-dom"
 
-import { SiteHeader } from "@/components/court/AppShell"
+import { SiteFooter, SiteHeader } from "@/components/court/AppShell"
 import { CourtLine } from "@/components/court/CourtLine"
 import { UmpireChair } from "@/components/court/UmpireChair"
 import { Button } from "@/components/ui/button"
@@ -39,11 +39,12 @@ const pct = (n: number) => `${n}%`
 
 export default function Landing() {
   return (
-    <div className="surround-surface page-frame relative min-h-svh overflow-x-clip pb-12 text-chalk md:pb-20">
+    <div className="surround-surface page-frame relative flex min-h-svh flex-col overflow-x-clip text-chalk">
       <Header />
-      <main className="px-[30px] pt-8 md:px-4 md:pt-12">
+      <main className="flex-1 px-[30px] pt-8 pb-12 md:px-4 md:pt-12 md:pb-20">
         <Court />
       </main>
+      <SiteFooter />
     </div>
   )
 }

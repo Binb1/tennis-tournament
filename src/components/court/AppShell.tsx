@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils"
 export function AppShell({ children, bare = false }: { children: ReactNode; bare?: boolean }) {
   const { profile } = useAuth()
   return (
-    <div className="page-surface min-h-svh overflow-x-clip pb-16 text-chalk">
+    <div className="page-surface flex min-h-svh flex-col overflow-x-clip text-chalk">
       <SiteHeader>
         {!bare && (
           <nav className="flex gap-3 text-sm font-medium min-[400px]:gap-4">
@@ -25,7 +25,8 @@ export function AppShell({ children, bare = false }: { children: ReactNode; bare
           </nav>
         )}
       </SiteHeader>
-      <main className="mx-auto max-w-[600px] px-4 pt-5 md:pt-8">{children}</main>
+      <main className="mx-auto w-full max-w-[600px] flex-1 px-4 pt-5 pb-16 md:pt-8">{children}</main>
+      <SiteFooter />
     </div>
   )
 }
@@ -35,11 +36,12 @@ export function AppShell({ children, bare = false }: { children: ReactNode; bare
  * then a thin band in the tournament colours. Wordmark stays in Shrikhand (brand).
  */
 export function SiteHeader({ children }: { children?: ReactNode }) {
+  const { session } = useAuth()
   return (
     <header className="relative z-20">
       <div className="wall">
         <div className="mx-auto flex max-w-[600px] items-center justify-between gap-2 px-4 py-1.5 md:py-4">
-          <Link to="/" className="flex min-h-11 shrink-0 items-center gap-2 font-brand text-lg leading-none min-[400px]:text-xl">
+          <Link to={session ? "/tournois" : "/"} className="flex min-h-11 shrink-0 items-center gap-2 font-brand text-lg leading-none min-[400px]:text-xl">
             <BallMark />
             Tiebreakers
           </Link>
@@ -51,6 +53,18 @@ export function SiteHeader({ children }: { children?: ReactNode }) {
       </div>
       <div aria-hidden="true" className="wall-band" />
     </header>
+  )
+}
+
+/** The stadium's far wall, mirrored at the bottom: the tournament band, then the wall. */
+export function SiteFooter({ className }: { className?: string }) {
+  return (
+    <footer className={cn("relative z-10", className)}>
+      <div aria-hidden="true" className="wall-band rotate-180" />
+      <div className="wall flex h-16 items-center justify-center">
+        <span className="font-brand text-sm leading-none opacity-45">Tiebreakers</span>
+      </div>
+    </footer>
   )
 }
 
@@ -210,9 +224,28 @@ export function Tag({ tone, children }: { tone: "alive" | "out" | "win" | "neutr
   )
 }
 
-/** A tennis player's result in one round, as a tag: Qualifié / Éliminé / À jouer. */
+/**
+ * A tennis player's result in one round: Qualifié / Éliminé / À jouer.
+ * Passive label (dot + text), so it never looks like a button.
+ */
 export function ResultTag({ result }: { result: "won" | "lost" | null | undefined }) {
-  if (result === "won") return <Tag tone="alive">Qualifié</Tag>
-  if (result === "lost") return <Tag tone="out">Éliminé</Tag>
-  return <Tag tone="neutral">À jouer</Tag>
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1.5 text-[10px] font-bold tracking-[0.1em] whitespace-nowrap uppercase [font-stretch:85%]",
+        result === "lost" ? "text-chalk/70" : "text-chalk/90",
+      )}
+    >
+      <span
+        aria-hidden="true"
+        className={cn(
+          "size-2 rounded-full",
+          result === "won" && "bg-ball",
+          result === "lost" && "bg-ink/70",
+          !result && "border border-chalk/80",
+        )}
+      />
+      {result === "won" ? "Qualifié" : result === "lost" ? "Éliminé" : "À jouer"}
+    </span>
+  )
 }

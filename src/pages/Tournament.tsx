@@ -3,6 +3,9 @@ import { Link, useParams } from "react-router-dom"
 import { ArrowLeft, Search } from "lucide-react"
 
 import { AppShell, Box, ChalkButton, ErrorBox, Loading, PageTitle, ResultTag, Tag } from "@/components/court/AppShell"
+import { Bracket } from "@/components/court/Bracket"
+import { Flag, MatchLine, PlayerName } from "@/components/court/PlayerLabel"
+import { SocialIcons } from "@/components/court/Socials"
 import { useAuth } from "@/lib/auth"
 import { useThemeOverride } from "@/lib/theme"
 import { formatLeft, useNow } from "@/lib/time"
@@ -14,6 +17,7 @@ import {
   formatDate,
   supabase,
   type EntryStatus,
+  type Match,
   type Pick,
   type Player,
   type PlayerResult,
@@ -21,7 +25,11 @@ import {
   type Tournament,
 } from "@/lib/supabase"
 
-type EntryRow = { id: string; user_id: string | null; profiles: { username: string; deleted_at: string | null } | null }
+type EntryRow = {
+  id: string
+  user_id: string | null
+  profiles: { username: string; deleted_at: string | null; x_handle?: string | null; instagram_handle?: string | null } | null
+}
 type Data = {
   t: Tournament
   rounds: Round[]
@@ -30,6 +38,7 @@ type Data = {
   entries: EntryRow[]
   statuses: EntryStatus[]
   picks: Pick[]
+  matches: Match[]
 }
 type ChipState = "won" | "lost" | "pending" | "missing" | "open"
 type TrailStep = { round: Round; state: ChipState; player?: Player }
@@ -42,20 +51,21 @@ async function load(id: string): Promise<Data> {
   if (r.error) throw new Error(r.error.message)
   const rounds = r.data as Round[]
   const roundIds = rounds.map((x) => x.id)
-  const [players, results, entries, statuses, picks] = await Promise.all([
-    fetchAll<Player>((a, b) => supabase.from("players").select("id, name, seed").eq("tournament_id", id).order("name").range(a, b)),
+  const [players, results, entries, statuses, picks, matches] = await Promise.all([
+    fetchAll<Player>((a, b) => supabase.from("players").select("id, name, seed, country, ranking").eq("tournament_id", id).order("name").range(a, b)),
     fetchAll<PlayerResult>((a, b) =>
       supabase.from("player_results").select("player_id, round_id, result").in("round_id", roundIds).order("player_id").order("round_id").range(a, b),
     ),
     fetchAll<EntryRow>((a, b) =>
-      supabase.from("entries").select("id, user_id, profiles(username, deleted_at)").eq("tournament_id", id).order("joined_at").order("id").range(a, b),
+      supabase.from("entries").select("id, user_id, profiles(username, deleted_at, x_handle, instagram_handle)").eq("tournament_id", id).order("joined_at").order("id").range(a, b),
     ),
     fetchAll<EntryStatus>((a, b) => supabase.from("entry_status").select("*").eq("tournament_id", id).order("entry_id").range(a, b)),
     fetchAll<Pick>((a, b) =>
       supabase.from("picks").select("entry_id, round_id, player_id").in("round_id", roundIds).order("entry_id").order("round_id").range(a, b),
     ),
+    fetchAll<Match>((a, b) => supabase.from("matches").select("*").eq("tournament_id", id).order("id").range(a, b)),
   ])
-  return { t: t as Tournament, rounds, players, results, entries, statuses, picks }
+  return { t: t as Tournament, rounds, players, results, entries, statuses, picks, matches }
 }
 
 /** Keyed by id: going from one tournament to another (back/forward) starts from a clean state. */
@@ -214,7 +224,14 @@ function derive(data: Data, uid: string | undefined, now: number) {
   const myStatus = myEntry ? statusByEntry.get(myEntry.id) ?? null : null
   const myPicks = myEntry ? picksByEntry.get(myEntry.id) ?? new Map<string, string>() : new Map<string, string>()
 
-  return { result, playerById, picksByEntry, roundByIdx, statusByEntry, lostRound, currentRound, locked, trail, myEntry, myStatus, myPicks }
+  // A player's match in a round: "<round id>:<player id>" -> match.
+  const matchOf = new Map<string, Match>()
+  for (const m of data.matches) {
+    if (m.player1_id) matchOf.set(`${m.round_id}:${m.player1_id}`, m)
+    if (m.player2_id) matchOf.set(`${m.round_id}:${m.player2_id}`, m)
+  }
+
+  return { result, playerById, picksByEntry, roundByIdx, statusByEntry, lostRound, currentRound, locked, trail, myEntry, myStatus, myPicks, matchOf }
 }
 type Derived = ReturnType<typeof derive>
 
@@ -274,7 +291,10 @@ function Chip({ step, withPlayer = false }: { step: TrailStep; withPlayer?: bool
     >
       <span className="tracking-[0.08em] uppercase">{step.round.name}</span>
       {withPlayer && (
-        <span className="font-medium normal-case">{step.player?.name ?? CHIP_LABEL[step.state]}</span>
+        <span className="inline-flex items-center gap-1 font-medium normal-case">
+          <Flag code={step.player?.country} />
+          {step.player?.name ?? CHIP_LABEL[step.state]}
+        </span>
       )}
       <span className="sr-only">{CHIP_LABEL[step.state]}</span>
     </span>
@@ -345,7 +365,9 @@ function MyPick({ data, d, onChanged }: { data: Data; d: Derived; onChanged: () 
       {statusRound && statusPid && (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-l-4 border-chalk bg-brick/40 px-4 py-3 text-sm">
           <span>Mon choix · {statusRound.name} :</span>
-          <strong className="font-bold">{d.playerById.get(statusPid)?.name}</strong>
+          <strong className="font-bold">
+            <PlayerName p={d.playerById.get(statusPid)} />
+          </strong>
           <ResultTag result={d.result.get(`${statusPid}:${statusRound.id}`)} />
         </div>
       )}
@@ -396,18 +418,27 @@ function MyPick({ data, d, onChanged }: { data: Data; d: Derived; onChanged: () 
                       aria-pressed={selected}
                       className={cn(
                         "flex min-h-12 w-full items-center gap-3 px-3 py-2.5 text-left transition-colors",
-                        selected ? "bg-chalk text-ink" : "hover:bg-chalk/10",
+                        selected ? "bg-chalk text-clay" : "hover:bg-chalk/10",
                         why && "cursor-not-allowed opacity-55",
                       )}
                     >
-                      <span className="w-7 shrink-0 text-xs font-bold opacity-70 tabular-nums">
+                      <span className={cn("w-7 shrink-0 text-xs font-bold tabular-nums", !selected && "opacity-70")}>
                         {p.seed ? `[${p.seed}]` : ""}
                       </span>
-                      <span className={cn("min-w-0 flex-1 truncate font-medium", why && "line-through decoration-1")}>
-                        {p.name}
+                      <span className="min-w-0 flex-1">
+                        <PlayerName
+                          p={p}
+                          className={cn(selected ? "font-bold" : "font-medium", why && "line-through decoration-1")}
+                        />
+                        {!why && <MatchLine m={d.matchOf.get(`${round.id}:${p.id}`)} pid={p.id} playerById={d.playerById} />}
                       </span>
                       {why && <span className="shrink-0 text-xs">{why}</span>}
-                      {selected && <Tag tone="alive">Mon choix</Tag>}
+                      {selected && (
+                        // Inverted tag on the chalk row: surface colour fill, chalk text.
+                        <span className="shrink-0 rounded-[2px] bg-clay px-2 py-0.5 text-[11px] font-bold tracking-[0.12em] whitespace-nowrap text-chalk uppercase [font-stretch:85%]">
+                          Mon choix
+                        </span>
+                      )}
                       {saving === p.id && <span className="shrink-0 text-xs">…</span>}
                     </button>
                   </li>
@@ -545,19 +576,30 @@ function Leaderboard({ data, d, uid }: { data: Data; d: Derived; uid?: string })
           const me = !!uid && r.e.user_id === uid
           return (
             <li key={r.e.id} className="border-t-2 border-chalk/50 first:border-t-0">
-              <button
+              {/* div role=button: the row holds social links, and <a> can't nest in <button>. */}
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => setHighlight(on ? null : r.e.id)}
+                onKeyDown={(ev) => {
+                  if (ev.target !== ev.currentTarget || (ev.key !== "Enter" && ev.key !== " ")) return
+                  ev.preventDefault()
+                  setHighlight(on ? null : r.e.id)
+                }}
                 aria-expanded={on}
                 className={cn(
-                  "w-full px-3 py-3 text-left transition-colors",
+                  "w-full cursor-pointer px-3 py-3 text-left transition-colors",
                   on ? "bg-brick/75 shadow-[inset_4px_0_0_var(--color-chalk)]" : me ? "bg-brick/35 hover:bg-brick/50" : "hover:bg-chalk/10",
                 )}
               >
                 <div className="flex items-center gap-3">
                   <span className="w-6 shrink-0 text-sm font-bold tabular-nums">{r.rank}</span>
-                  <span className="min-w-0 flex-1 truncate font-medium">
-                    {r.name}
-                    {me && <span className="ml-1.5 text-xs opacity-75">(moi)</span>}
+                  <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                    <span className="min-w-0 truncate font-medium">
+                      {r.name}
+                      {me && <span className="ml-1.5 text-xs opacity-75">(moi)</span>}
+                    </span>
+                    {!r.e.profiles?.deleted_at && <SocialIcons p={r.e.profiles} />}
                   </span>
                   {isWinner(r) ? (
                     <Tag tone="win">{winnerCount > 1 ? "Co-vainqueur" : "Vainqueur"}</Tag>
@@ -574,7 +616,7 @@ function Leaderboard({ data, d, uid }: { data: Data; d: Derived; uid?: string })
                     ))}
                   </div>
                 )}
-              </button>
+              </div>
             </li>
           )
         })}
@@ -691,7 +733,14 @@ function Grid({
                       title={`${r.name} · ${player?.name ?? CHIP_LABEL[state]}`}
                       className={cn("border-l-2 border-chalk/40 px-2 py-2 whitespace-nowrap", CELL_STYLE[state])}
                     >
-                      {player ? shortName(player.name) : "–"}
+                      {player ? (
+                        <span className="inline-flex items-center gap-1">
+                          <Flag code={player.country} />
+                          {shortName(player.name)}
+                        </span>
+                      ) : (
+                        "–"
+                      )}
                       <span className="sr-only"> · {CHIP_LABEL[state]}</span>
                     </td>
                   )
@@ -733,8 +782,8 @@ function Distribution({ data, d, rounds }: { data: Data; d: Derived; rounds: Rou
                 {list.map(({ p, pid, n, lost }) => (
                   <li key={pid} className="text-sm">
                     <div className="flex items-baseline justify-between gap-3">
-                      <span className={cn("min-w-0 flex-1 truncate font-medium", lost && "text-chalk/65 line-through")}>
-                        {p?.name ?? "?"}
+                      <span className={cn("min-w-0 flex-1 font-medium", lost && "text-chalk/65 line-through")}>
+                        <PlayerName p={p} />
                         {lost && <span className="sr-only"> (éliminé)</span>}
                       </span>
                       <span className="shrink-0 text-xs font-bold tabular-nums">
@@ -886,8 +935,53 @@ function Draw({ data, d }: { data: Data; d: Derived }) {
   const fallback = d.currentRound ?? data.rounds[data.rounds.length - 1]
   const [roundId, setRoundId] = useState(fallback?.id)
   const [filter, setFilter] = useState<DrawFilter>("all")
+  const [view, setView] = useState<"list" | "tree">("list")
+  const [open, setOpen] = useState<string | null>(null)
+  const [from, setFrom] = useState(0)
   const round = data.rounds.find((r) => r.id === roundId) ?? fallback
   if (!round) return <Empty>Le tableau n'est pas encore publié.</Empty>
+
+  const toggle = (
+    <Segmented
+      label="Affichage du tableau"
+      value={view}
+      onChange={setView}
+      options={[
+        ["list", "Liste"],
+        ["tree", "Arbre"],
+      ]}
+    />
+  )
+  if (view === "tree") {
+    return (
+      <div className="space-y-4">
+        {toggle}
+        {data.matches.length === 0 ? (
+          <Empty>Les matchs ne sont pas encore publiés.</Empty>
+        ) : (
+          <>
+            <div role="group" aria-label="Afficher à partir du tour" className="flex flex-wrap items-center gap-1.5">
+              <span className="micro-label mr-1">Depuis</span>
+              {data.rounds.slice(0, -1).map((r, i) => (
+                <ChipButton key={r.id} on={i === from} onClick={() => setFrom(i)}>
+                  {r.name}
+                </ChipButton>
+              ))}
+            </div>
+            {/* Keyed by the start round: a new start remounts the box, so it starts scrolled to the left. */}
+            <Bracket
+              key={from}
+              rounds={data.rounds.slice(from)}
+              matches={data.matches}
+              playerById={d.playerById}
+              drawSize={Math.max(2, data.t.draw_size / 2 ** from)}
+              pickByRound={d.myPicks}
+            />
+          </>
+        )}
+      </div>
+    )
+  }
 
   const prev = d.roundByIdx.get(round.idx - 1)
   const inRound = data.players
@@ -907,6 +1001,7 @@ function Draw({ data, d }: { data: Data; d: Derived }) {
 
   return (
     <div className="space-y-4">
+      {toggle}
       <div className="flex flex-wrap gap-1.5">
         {data.rounds.map((r) => (
           <ChipButton key={r.id} on={r.id === round.id} onClick={() => setRoundId(r.id)}>
@@ -935,14 +1030,21 @@ function Draw({ data, d }: { data: Data; d: Derived }) {
               {shown.map(({ p, res }) => (
                 <li
                   key={p.id}
-                  className={cn(
-                    "flex min-h-11 items-center gap-2 border-b-2 border-chalk/40 px-3 py-2 text-sm min-[520px]:odd:border-r-2",
-                    res === "lost" && "text-chalk/70",
-                  )}
+                  className={cn("border-b-2 border-chalk/40 text-sm min-[520px]:odd:border-r-2", res === "lost" && "text-chalk/70")}
                 >
-                  <span className="w-7 shrink-0 text-xs font-bold tabular-nums opacity-75">{p.seed ? `[${p.seed}]` : ""}</span>
-                  <span className={cn("min-w-0 flex-1 truncate font-medium", res === "lost" && "line-through")}>{p.name}</span>
-                  <ResultTag result={res} />
+                  {/* Tap to show the whole match line (score, opponent). */}
+                  <button
+                    onClick={() => setOpen(open === p.id ? null : p.id)}
+                    aria-expanded={open === p.id}
+                    className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-left hover:bg-chalk/10"
+                  >
+                    <span className="w-7 shrink-0 text-xs font-bold tabular-nums opacity-75">{p.seed ? `[${p.seed}]` : ""}</span>
+                    <span className="min-w-0 flex-1">
+                      <PlayerName p={p} className={cn(res === "won" ? "font-bold" : "font-medium", res === "lost" && "line-through")} />
+                      <MatchLine m={d.matchOf.get(`${round.id}:${p.id}`)} pid={p.id} playerById={d.playerById} wrap={open === p.id} />
+                    </span>
+                    <ResultTag result={res} />
+                  </button>
                 </li>
               ))}
             </ul>

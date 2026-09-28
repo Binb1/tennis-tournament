@@ -1,9 +1,13 @@
-// Edge Function sync-results: pulls finished singles matches from "Tennis API - ATP WTA ITF" (RapidAPI)
-// into player_results. Body {tournament_id, action: "import_draw"} (admin only) imports the main-draw players.
+// Edge Function sync-results: pulls the singles draw from "Tennis API - ATP WTA ITF" (RapidAPI)
+// into matches (bracket, opponents, scores) and player_results (won/lost).
+// Body {tournament_id, action: "import_draw"} (admin only) imports the main-draw players, their country and ranking.
+// API calls: sync = 1 per live tournament (draws; results endpoint only as fallback), import = 2 (draws + rankings).
 // Called by pg_cron (header x-cron-secret) or by an admin from the admin page (user JWT).
 // Secrets (Edge Function secrets): TENNIS_API_KEY, CRON_SECRET.
 import { createClient } from "npm:@supabase/supabase-js@2"
-import { type ApiMatch, type Side, parseDraw, parseResults } from "./parse.ts"
+import {
+  type ApiMatch, type Side, type Slot, drawResults, parseDraw, parseDrawMatches, parseRankings, parseResults,
+} from "./parse.ts"
 
 const API_HOST = "tennis-api-atp-wta-itf.p.rapidapi.com"
 
@@ -14,7 +18,7 @@ const cors = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } })
 
-type Tournament = { id: string; external_id: string; tour: string }
+type Tournament = { id: string; external_id: string; tour: string; starts_at: string | null }
 // deno-lint-ignore no-explicit-any
 type Db = any
 
@@ -30,33 +34,99 @@ async function api(key: string, path: string) {
 const norm = (s: string) =>
   s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/\s+/g, " ").trim()
 
-/** Inserts the main-draw players not yet in the tournament (matched by external_id or name). */
+/** Full singles draw (all main rounds, bracket slots, results). Path order: tournament/{tour}/{id}/{year}/draws. */
+const fetchDraw = (key: string, t: Tournament) =>
+  api(key, `tournament/${t.tour.toLowerCase()}/${t.external_id}/${new Date(t.starts_at ?? Date.now()).getUTCFullYear()}/draws?includeAll=true`)
+
+/** Player lookup: API id first, then normalized name. */
+function playerFinder(players: { id: string; name: string; external_id: string | null }[]) {
+  const byExt = new Map(players.filter((p) => p.external_id).map((p) => [String(p.external_id), p.id]))
+  const byName = new Map(players.map((p) => [norm(p.name), p.id]))
+  return (s: Side | null): string | null => (s ? byExt.get(s.external_id) ?? byName.get(norm(s.name)) ?? null : null)
+}
+
+/** Upserts one matches row per bracket slot (key: tournament + "<roundId>-<slot>"). Returns the parsed slots. */
+async function upsertMatches(db: Db, t: Tournament, draw: unknown): Promise<Slot[]> {
+  const [{ data: players }, { data: rounds }] = await Promise.all([
+    db.from("players").select("id, name, external_id").eq("tournament_id", t.id),
+    db.from("rounds").select("id, idx").eq("tournament_id", t.id),
+  ])
+  const find = playerFinder(players ?? [])
+  const roundByIdx = new Map((rounds ?? []).map((r: Db) => [r.idx, r.id]))
+  const slots = parseDrawMatches(draw, (rounds ?? []).length)
+  // The API can list a slot twice (e.g. byes in 96/56 draws): keep one row per slot, a finished match first.
+  const bySlot = new Map<string, Slot>()
+  for (const s of slots) {
+    if (s.position == null) continue // bye entries without a slot
+    if (bySlot.get(s.external_id)?.status !== "done") bySlot.set(s.external_id, s)
+  }
+  const rows = [...bySlot.values()].filter((s) => roundByIdx.has(s.round_idx)).map((s) => ({
+    tournament_id: t.id,
+    round_id: roundByIdx.get(s.round_idx),
+    external_id: s.external_id,
+    player1_id: find(s.player1),
+    player2_id: find(s.player2),
+    winner_id: find(s.winner),
+    scheduled_at: s.scheduled_at,
+    score: s.score,
+    status: s.status,
+    position: s.position,
+    updated_at: new Date().toISOString(),
+  }))
+  if (rows.length) {
+    const { error } = await db.from("matches").upsert(rows, { onConflict: "tournament_id,external_id" })
+    if (error) throw new Error(error.message)
+  }
+  return slots
+}
+
+/**
+ * Inserts the main-draw players not yet in the tournament (matched by external_id or name), sets country and
+ * world ranking on all of them (seed only when empty), then stores the matches.
+ */
 async function importDraw(db: Db, key: string, tournamentId: string) {
-  const { data: t, error } = await db.from("tournaments").select("id, external_id, tour").eq("id", tournamentId).single()
+  const { data: t, error } = await db.from("tournaments").select("id, external_id, tour, starts_at").eq("id", tournamentId).single()
   if (error || !t?.external_id) return json({ error: error?.message ?? "ID Tennis API manquant" }, 400)
   try {
     const tour = t.tour.toLowerCase()
-    const fixtures = await api(key, `${tour}/fixtures/tournament/${t.external_id}`)
-    // Results cover the first-round matches already played (absent from fixtures). None yet = fine.
-    const results = await api(key, `${tour}/tournament/results/${t.external_id}`).catch(() => null)
+    // Draws (all rounds, slots, seeds, countries); fixtures + results only if it fails or is empty.
+    const d = await fetchDraw(key, t).catch((e) => (console.error("draws failed, fallback:", e), null))
+    const draw = d?.singles?.length ? d : null
+    const sources = draw ? [draw] : [
+      await api(key, `${tour}/fixtures/tournament/${t.external_id}`),
+      await api(key, `${tour}/tournament/results/${t.external_id}`).catch(() => null), // none yet = fine
+    ]
+    const ranks = parseRankings(await api(key, `${tour}/ranking/singles?pageSize=500`).catch(() => null))
 
-    const { data: players } = await db.from("players").select("name, external_id").eq("tournament_id", t.id)
-    const seen = new Set<string>()
-    for (const p of players ?? []) {
-      seen.add(norm(p.name))
-      if (p.external_id) seen.add(`id:${p.external_id}`)
-    }
+    const { data: players } = await db.from("players").select("id, name, seed, external_id").eq("tournament_id", t.id)
+    const find = playerFinder(players ?? [])
+    const current = new Map((players ?? []).map((p: Db) => [p.id, p]))
     const rows = []
-    for (const p of parseDraw(fixtures, results)) {
-      if (seen.has(`id:${p.external_id}`) || seen.has(norm(p.name))) continue
-      seen.add(`id:${p.external_id}`).add(norm(p.name))
-      rows.push({ tournament_id: t.id, name: p.name, seed: p.seed, external_id: p.external_id })
+    const updates = []
+    for (const p of parseDraw(...sources)) {
+      const ranking = ranks.get(p.external_id) ?? null
+      const id = find(p)
+      if (!id) {
+        rows.push({ tournament_id: t.id, name: p.name, seed: p.seed, external_id: p.external_id, country: p.country, ranking })
+        continue
+      }
+      const cur: Db = current.get(id)
+      updates.push(
+        db.from("players").update({
+          country: p.country,
+          ...(ranks.size ? { ranking } : {}), // rankings call failed: keep the old value
+          seed: cur.seed ?? p.seed,
+          external_id: cur.external_id ?? p.external_id,
+        }).eq("id", id),
+      )
     }
     if (rows.length) {
       const { error: insErr } = await db.from("players").insert(rows)
       if (insErr) throw new Error(insErr.message)
     }
-    return json({ inserted: rows.length })
+    for (const r of await Promise.all(updates)) if (r.error) throw new Error(r.error.message)
+    if (draw) await upsertMatches(db, t, draw)
+    return json({ inserted: rows.length, updated: updates.length })
   } catch (e) {
     return json({ error: e instanceof Error ? e.message : String(e) }, 500)
   }
@@ -87,7 +157,7 @@ Deno.serve(async (req) => {
     if (isCron || !body.tournament_id) return json({ error: "Requête invalide" }, 400)
     return importDraw(db, apiKey, body.tournament_id)
   }
-  let q = db.from("tournaments").select("id, external_id, tour").not("external_id", "is", null)
+  let q = db.from("tournaments").select("id, external_id, tour, starts_at").not("external_id", "is", null)
   q = body.tournament_id ? q.eq("id", body.tournament_id) : q.eq("status", "live")
   const { data: tournaments, error } = await q
   if (error) return json({ error: error.message }, 500)
@@ -100,13 +170,15 @@ Deno.serve(async (req) => {
         db.from("players").select("id, name, external_id").eq("tournament_id", t.id),
         db.from("rounds").select("id, idx").eq("tournament_id", t.id),
       ])
-      const body = await api(apiKey, `${t.tour.toLowerCase()}/tournament/results/${t.external_id}`)
-      const matches: ApiMatch[] = parseResults(body, (rounds ?? []).length)
+      // Draws: 1 call for both matches and player_results. Results endpoint only if draws fails.
+      const d = await fetchDraw(apiKey, t).catch((e) => (console.error("draws failed, fallback:", e), null))
+      const draw = d?.singles?.length ? d : null
+      const matches: ApiMatch[] = draw
+        ? drawResults(await upsertMatches(db, t, draw))
+        : parseResults(await api(apiKey, `${t.tour.toLowerCase()}/tournament/results/${t.external_id}`), (rounds ?? []).length)
       run.matches = matches.length
 
-      const byExt = new Map((players ?? []).filter((p: Db) => p.external_id).map((p: Db) => [String(p.external_id), p.id]))
-      const byName = new Map((players ?? []).map((p: Db) => [norm(p.name), p.id]))
-      const findPlayer = (s: Side) => byExt.get(s.external_id) ?? byName.get(norm(s.name))
+      const findPlayer = playerFinder(players ?? [])
       const roundByIdx = new Map((rounds ?? []).map((r: Db) => [r.idx, r.id]))
 
       const { data: existing } = await db
