@@ -579,7 +579,17 @@ function ResultToggle({
 
 /* 4b. Synchronisation ------------------------------------------------ */
 
-type SyncRun = { id: number; at: string; ok: boolean; matches: number; updated: number; error: string | null; unmatched: string[] }
+type SyncRun = {
+  id: number
+  at: string
+  kind: "results" | "draw"
+  ok: boolean
+  matches: number
+  updated: number
+  api_calls: number
+  error: string | null
+  unmatched: string[]
+}
 
 function SyncSection({ data, onChanged }: Props) {
   const [runs, setRuns] = useState<SyncRun[]>([])
@@ -590,7 +600,7 @@ function SyncSection({ data, onChanged }: Props) {
   const loadRuns = useCallback(async () => {
     const { data: rows, error } = await supabase
       .from("sync_runs")
-      .select("id, at, ok, matches, updated, error, unmatched")
+      .select("id, at, kind, ok, matches, updated, api_calls, error, unmatched")
       .eq("tournament_id", data.t.id)
       .order("at", { ascending: false })
       .limit(5)
@@ -637,7 +647,10 @@ function SyncSection({ data, onChanged }: Props) {
               <Tag tone={r.ok ? "alive" : "out"}>{r.ok ? "OK" : "Erreur"}</Tag>
             </div>
             <div className="mt-1 text-xs tabular-nums">
-              {r.matches} matchs · {r.updated} mis à jour
+              {r.kind === "draw"
+                ? `Tableau · ${r.updated} joueur(s) ajouté(s)`
+                : `${r.matches} matchs · ${r.updated} mis à jour`}{" "}
+              · {r.api_calls} appel(s) API
             </div>
             {r.error && <div className="mt-1 text-xs text-chalk/85">{r.error}</div>}
             {r.unmatched.length > 0 && (
@@ -651,24 +664,37 @@ function SyncSection({ data, onChanged }: Props) {
   )
 }
 
-/** Cron runs hourly at :00 ('0 * * * *', UTC), only while the tournament is live with an API id. */
+/**
+ * Cron checks hourly at :00 ('0 * * * *', UTC). See scheduledRun in the sync-results Edge Function: results only
+ * while a match is due (or every 6 h), draws in the 3 days before the first lock, status follows the calendar.
+ */
 function NextSync({ t }: { t: Tournament }) {
   const now = useNow(10_000)
   const hour = 60 * 60_000
   const next = Math.floor(now / hour) * hour + hour
-  const paused =
-    t.status !== "live" ? "tournoi pas en cours" : !t.external_id ? "pas d'ID Tennis API" : null
+  const paused = !t.external_id
+    ? "pas d'ID Tennis API"
+    : t.status === "draft" || t.status === "finished"
+      ? "tournoi pas en cours"
+      : null
   return (
-    <p className="mb-2 text-sm">
+    <div className="mb-2 space-y-1 text-sm">
       {paused ? (
-        <>Synchro auto en pause ({paused})</>
+        <p>Synchro auto en pause ({paused})</p>
       ) : (
         <>
-          Prochaine synchro : <strong className="tabular-nums">{formatTime(next)}</strong> (dans{" "}
-          {Math.ceil((next - now) / 60_000)} min)
+          <p>
+            Prochaine vérification : <strong className="tabular-nums">{formatTime(next)}</strong> (dans{" "}
+            {Math.ceil((next - now) / 60_000)} min)
+          </p>
+          <p className="text-chalk/85">
+            {t.status === "registration"
+              ? "Import auto du tableau dès sa publication (3 jours avant le 1er tour), puis passage « En cours » au verrouillage."
+              : "Résultats synchronisés quand un match est prévu ou en cours (au moins toutes les 6 h), dans la limite de 45 appels API par jour."}
+          </p>
         </>
       )}
-    </p>
+    </div>
   )
 }
 
