@@ -10,7 +10,8 @@
     <script>
       // Court surface (src/lib/theme.ts), applied before first paint.
       try {
-        var t = localStorage.getItem("tiebreakers-theme")
+        // Saved choice, else the last known live tournament's style (refreshed by loadLiveTheme).
+        var t = localStorage.getItem("tiebreakers-theme") || localStorage.getItem("tiebreakers-live-theme")
         var c = {
           usopen: "#0b1f3a", ao: "#062a4d", wimbledon: "#0c3b1f", indianwells: "#1b3a2b", miami: "#0a3140",
           montecarlo: "#0a2d5c", madrid: "#2a0a1f", rome: "#1a3a2a", canada: "#b0162f", cincinnati: "#13301f",

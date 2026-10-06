@@ -1,9 +1,12 @@
 import { useEffect, useSyncExternalStore } from "react"
 
+import { supabase } from "@/lib/supabase"
+
 /**
  * Court surface theme. The palette, fonts and textures live in index.css under
  * `html[data-theme=…]`; this module only stores the choice and sets the attribute.
- * index.html applies the stored theme before first paint (same key, same logic).
+ * Default (no choice saved): the live tournament's style, else clay.
+ * index.html applies the stored theme before first paint (same keys, same logic).
  */
 
 export type ThemeId =
@@ -83,16 +86,46 @@ export function suggestTheme(name: string): ThemeId | null {
 export const themeLabel = (id: ThemeId) => THEMES.find((x) => x.id === id)!.label
 
 const KEY = "tiebreakers-theme"
+/** Last known live tournament style, cached so the next visit paints it before the fetch. */
+const LIVE_KEY = "tiebreakers-live-theme"
 const listeners = new Set<() => void>()
+let live: ThemeId | null = null
+let overridden = false // a tournament page is painting its own style
 
-export function getTheme(): ThemeId {
+function stored(key: string): ThemeId | null {
   try {
-    const t = localStorage.getItem(KEY)
+    const t = localStorage.getItem(key)
     if (isThemeId(t)) return t
   } catch {
     /* storage unavailable */
   }
-  return "clay"
+  return null
+}
+
+export function getTheme(): ThemeId {
+  return stored(KEY) ?? live ?? stored(LIVE_KEY) ?? "clay"
+}
+
+/** Fetch the live tournament's style (latest start wins) and paint it when the player has no saved choice. */
+export async function loadLiveTheme() {
+  const { data, error } = await supabase
+    .from("tournaments")
+    .select("theme")
+    .eq("status", "live")
+    .not("theme", "is", null)
+    .order("starts_at", { ascending: false })
+    .limit(1)
+  if (error) return
+  const t = data[0]?.theme
+  live = isThemeId(t) ? t : "clay"
+  try {
+    if (isThemeId(t)) localStorage.setItem(LIVE_KEY, t)
+    else localStorage.removeItem(LIVE_KEY)
+  } catch {
+    /* storage unavailable */
+  }
+  // A tournament page's own style stays on until it unmounts (it repaints getTheme() then).
+  if (!stored(KEY) && !overridden) apply(live)
 }
 
 /** Paint a theme without saving it. */
@@ -121,8 +154,12 @@ export function setTheme(id: ThemeId) {
 export function useThemeOverride(id: string | null | undefined) {
   useEffect(() => {
     if (!isThemeId(id)) return
+    overridden = true
     apply(id)
-    return () => apply(getTheme())
+    return () => {
+      overridden = false
+      apply(getTheme())
+    }
   }, [id])
 }
 
