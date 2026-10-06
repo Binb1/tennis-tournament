@@ -169,6 +169,10 @@ export const STATUS_LABEL: Record<TournamentStatus, string> = {
   finished: "Terminé",
 }
 
+/** Registration without an imported draw is shown as "upcoming", not "open". */
+export const statusLabel = (status: TournamentStatus, hasDraw: boolean) =>
+  status === "registration" && !hasDraw ? "Tableau à venir" : STATUS_LABEL[status]
+
 export function formatDate(iso: string | null, withTime = false) {
   if (!iso) return "Date à venir"
   return new Date(iso).toLocaleString("fr-FR", {

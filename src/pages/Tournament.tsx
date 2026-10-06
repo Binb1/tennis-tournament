@@ -11,10 +11,10 @@ import { useThemeOverride } from "@/lib/theme"
 import { formatLeft, useNow } from "@/lib/time"
 import { cn } from "@/lib/utils"
 import {
-  STATUS_LABEL,
   displayName,
   fetchAll,
   formatDate,
+  statusLabel,
   supabase,
   type EntryStatus,
   type Match,
@@ -148,7 +148,7 @@ function TournamentView({ id }: { id: string }) {
   return (
     <AppShell>
       <BackLink />
-      <PageTitle eyebrow={`${STATUS_LABEL[t.status]} · ${t.tour}`}>{t.name}</PageTitle>
+      <PageTitle eyebrow={`${statusLabel(t.status, data.players.length > 0)} · ${t.tour}`}>{t.name}</PageTitle>
       <p className="-mt-2 mb-5 text-sm text-chalk/85">
         {formatDate(t.starts_at)} · {data.entries.length} {data.entries.length > 1 ? "inscrits" : "inscrit"}
       </p>
