@@ -7,10 +7,10 @@ import { MiniCourt } from "@/components/court/SurfacePicker"
 import { useAuth } from "@/lib/auth"
 import { isThemeId, themeLabel } from "@/lib/theme"
 import {
-  STATUS_LABEL,
   fetchLastPicks,
   fetchWinners,
   formatDate,
+  statusLabel,
   supabase,
   type EntryStatus,
   type LastPick,
@@ -19,13 +19,17 @@ import {
 } from "@/lib/supabase"
 import { formatLeft, useNow } from "@/lib/time"
 
-type Row = Tournament & { entries: { count: number }[] }
+type Row = Tournament & { entries: { count: number }[]; players: { count: number }[] }
 
-const GROUPS = [
-  { status: "registration", title: "Ouverts" },
-  { status: "live", title: "En cours" },
-  { status: "finished", title: "Terminés" },
-] as const
+const hasDraw = (t: Row) => (t.players[0]?.count ?? 0) > 0
+
+/** Registration only counts as open once the draw is imported. Upcoming groups: soonest first; finished: latest first. */
+const GROUPS: { title: string; match: (t: Row) => boolean; latestFirst?: boolean }[] = [
+  { title: "Ouverts", match: (t) => t.status === "registration" && hasDraw(t) },
+  { title: "En cours", match: (t) => t.status === "live" },
+  { title: "À venir", match: (t) => t.status === "registration" && !hasDraw(t) },
+  { title: "Terminés", match: (t) => t.status === "finished", latestFirst: true },
+]
 
 export default function Tournaments() {
   const { session } = useAuth()
@@ -43,7 +47,7 @@ export default function Tournaments() {
     let active = true
     setError(null)
     Promise.all([
-      supabase.from("tournaments").select("*, entries(count)").order("starts_at", { ascending: false }),
+      supabase.from("tournaments").select("*, entries(count), players(count)").order("starts_at", { ascending: false }),
       supabase.from("entry_status").select("*").eq("user_id", session!.user.id),
     ]).then(async ([t, e]) => {
       if (!active) return
@@ -85,10 +89,11 @@ export default function Tournaments() {
       {rows && rows.length === 0 && <p className="py-8 text-center text-chalk/85">Aucun tournoi pour l'instant.</p>}
       {rows &&
         GROUPS.map((g) => {
-          const list = rows.filter((t) => t.status === g.status)
+          const list = rows.filter(g.match)
+          if (!g.latestFirst) list.reverse()
           if (!list.length) return null
           return (
-            <section key={g.status} className="mb-8">
+            <section key={g.title} className="mb-8">
               <h2 className="micro-label mb-3">{g.title}</h2>
               <div className="space-y-3">
                 {list.map((t) => (
@@ -134,7 +139,7 @@ function TournamentCard({
       <Box className="flex items-center gap-3 px-4 py-4 transition-colors hover:bg-chalk/10">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Tag tone="neutral">{STATUS_LABEL[t.status]}</Tag>
+            <Tag tone="neutral">{statusLabel(t.status, hasDraw(t))}</Tag>
             {me && <MyState status={t.status} me={me} winner={winners.has(me.entry_id)} />}
           </div>
           <h3 className="mt-2 font-display text-2xl leading-tight [overflow-wrap:anywhere]">
