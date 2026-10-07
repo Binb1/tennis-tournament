@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils"
 import {
   displayName,
   fetchAll,
+  canJoin,
   formatDate,
   statusLabel,
   supabase,
@@ -156,11 +157,16 @@ function TournamentView({ id }: { id: string }) {
         {formatDate(t.starts_at)} · {data.entries.length} {data.entries.length > 1 ? "inscrits" : "inscrit"}
       </p>
 
-      {t.status === "registration" && !d.myEntry && (
+      {canJoin(t, data.rounds, now) && !d.myEntry && (
         <div className="mb-6 space-y-3">
           <ChalkButton onClick={join} disabled={joining} className="w-full">
             {joining ? "Inscription…" : "Rejoindre le tournoi"}
           </ChalkButton>
+          {t.status === "live" && d.currentRound && (
+            <p className="text-sm text-chalk/85">
+              Inscription en cours de tournoi : les tours déjà joués ne comptent pas, tu commences au {d.currentRound.name}.
+            </p>
+          )}
           {joinError && <ErrorBox message={joinError} />}
         </div>
       )}
