@@ -137,10 +137,10 @@ function Court() {
       {/* ---- top half ---- */}
       <Zone top={0} height={BACK}>
         <h1
-          className="animate-rise chalk-text font-brand leading-[1.05] whitespace-nowrap text-[calc((100cqw-32px)/6.7)]"
+          className="animate-rise chalk-text font-brand leading-[1.05] whitespace-nowrap text-[calc((100cqw-32px)/8.6)]"
           style={{ animationDelay: "200ms" }}
         >
-          Tiebreakers
+          Tennis Fantasy
         </h1>
       </Zone>
 

@@ -85,6 +85,7 @@ export function suggestTheme(name: string): ThemeId | null {
 
 export const themeLabel = (id: ThemeId) => THEMES.find((x) => x.id === id)!.label
 
+// Storage keys keep the app's former name (Tiebreakers) so saved choices survive the rename.
 const KEY = "tiebreakers-theme"
 /** Last known live tournament style, cached so the next visit paints it before the fetch. */
 const LIVE_KEY = "tiebreakers-live-theme"

@@ -44,7 +44,7 @@ export function SiteHeader({ children }: { children?: ReactNode }) {
         <div className="mx-auto flex max-w-[600px] items-center justify-between gap-2 px-4 py-1.5 md:py-4">
           <Link to={session ? "/tournois" : "/"} className="flex min-h-11 shrink-0 items-center gap-2 font-brand text-lg leading-none min-[400px]:text-xl">
             <BallMark />
-            Tiebreakers
+            Tennis Fantasy
           </Link>
           <div className="flex items-center gap-2 min-[400px]:gap-3">
             {children}
@@ -63,7 +63,7 @@ export function SiteFooter({ className }: { className?: string }) {
     <footer className={cn("relative z-10", className)}>
       <div aria-hidden="true" className="wall-band rotate-180" />
       <div className="wall flex h-16 items-center justify-center">
-        <span className="font-brand text-sm leading-none opacity-45">Tiebreakers</span>
+        <span className="font-brand text-sm leading-none opacity-45">Tennis Fantasy</span>
       </div>
     </footer>
   )

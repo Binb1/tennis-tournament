@@ -5,7 +5,7 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ------------------------------------------------------------------
-   Tiebreakers — design tokens
+   Tennis Fantasy — design tokens
    Clay court palette. Fonts are loaded in index.html (Google Fonts).
    ------------------------------------------------------------------ */
 @theme {
