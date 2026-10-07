@@ -58,6 +58,8 @@ export type Match = {
 }
 export type PlayerResult = { player_id: string; round_id: string; result: "won" | "lost" | null }
 export type Pick = { entry_id: string; round_id: string; player_id: string }
+/** Admin "repêchage": a locked round without a pick that does not eliminate the entry. */
+export type Waiver = { entry_id: string; round_id: string }
 export type EntryStatus = {
   entry_id: string
   tournament_id: string
@@ -167,6 +169,32 @@ export const STATUS_LABEL: Record<TournamentStatus, string> = {
   registration: "Ouvert",
   live: "En cours",
   finished: "Terminé",
+}
+
+/** A tournament row with its player count (`players(count)`), enough to know whether the draw is imported. */
+export type WithDraw = Tournament & { players: { count: number }[] }
+
+export const hasDraw = (t: WithDraw) => (t.players[0]?.count ?? 0) > 0
+
+/**
+ * Tournament list sections, shared by the players' list and the admin. Registration only counts as open once the
+ * draw is imported. Rows come latest first (starts_at desc); upcoming sections flip to soonest first.
+ * `drafts`: admin only, drafts after the upcoming ones.
+ */
+export function groupTournaments<T extends WithDraw>(rows: T[], drafts = false): { title: string; list: T[] }[] {
+  const groups: { title: string; match: (t: T) => boolean; latestFirst?: boolean }[] = [
+    { title: "Ouverts", match: (t) => t.status === "registration" && hasDraw(t) },
+    { title: "En cours", match: (t) => t.status === "live" },
+    { title: "À venir", match: (t) => t.status === "registration" && !hasDraw(t) },
+    ...(drafts ? [{ title: "Brouillons", match: (t: T) => t.status === "draft" }] : []),
+    { title: "Terminés", match: (t) => t.status === "finished", latestFirst: true },
+  ]
+  return groups
+    .map((g) => {
+      const list = rows.filter(g.match)
+      return { title: g.title, list: g.latestFirst ? list : list.reverse() }
+    })
+    .filter((g) => g.list.length > 0)
 }
 
 /** Registration without an imported draw is shown as "upcoming", not "open". */

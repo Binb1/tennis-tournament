@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom"
 import { ChevronRight } from "lucide-react"
 
 import { AppShell, Box, ChalkButton, ErrorBox, Field, Loading, PageTitle, Tag } from "@/components/court/AppShell"
-import { STATUS_LABEL, formatDate, supabase, type Tournament } from "@/lib/supabase"
+import { formatDate, groupTournaments, hasDraw, statusLabel, supabase, type WithDraw } from "@/lib/supabase"
 import { suggestTheme, THEME_GROUPS, THEMES } from "@/lib/theme"
 
 /** Early rounds are numbered from the start, the last 4 are always 8es → Finale (32 draw: 1er tour, 8es, …). */
@@ -45,7 +45,7 @@ export async function logAdmin(action: string, payload: Record<string, unknown>)
 
 export default function AdminHome() {
   const navigate = useNavigate()
-  const [rows, setRows] = useState<Tournament[] | null>(null)
+  const [rows, setRows] = useState<WithDraw[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [reload, setReload] = useState(0)
 
@@ -65,12 +65,12 @@ export default function AdminHome() {
     setError(null)
     supabase
       .from("tournaments")
-      .select("*")
+      .select("*, players(count)")
       .order("starts_at", { ascending: false })
       .then(({ data, error }) => {
         if (!active) return
         if (error) setError(error.message)
-        else setRows(data as Tournament[])
+        else setRows(data as WithDraw[])
       })
     return () => {
       active = false
@@ -115,26 +115,31 @@ export default function AdminHome() {
       <PageTitle eyebrow="Administration">Admin</PageTitle>
 
       <section className="mb-10">
-        <h2 className="micro-label mb-3">Tous les tournois</h2>
         {error && <ErrorBox message={error} onRetry={() => setReload((n) => n + 1)} />}
         {!rows && !error && <Loading />}
         {rows && rows.length === 0 && <p className="py-4 text-chalk/85">Aucun tournoi pour l'instant.</p>}
-        <div className="space-y-3">
-          {rows?.map((t) => (
-            <Link key={t.id} to={`/admin/tournois/${t.id}`} className="block">
-              <Box className="flex items-center gap-3 px-4 py-4 transition-colors hover:bg-chalk/10">
-                <div className="min-w-0 flex-1">
-                  <Tag tone={t.status === "draft" ? "out" : "neutral"}>{STATUS_LABEL[t.status]}</Tag>
-                  <h3 className="mt-2 font-display text-2xl leading-tight">{t.name}</h3>
-                  <p className="mt-1 text-sm text-chalk/85">
-                    {t.tour} · tableau {t.draw_size} · {formatDate(t.starts_at)}
-                  </p>
-                </div>
-                <ChevronRight className="size-5 shrink-0 text-chalk/80" />
-              </Box>
-            </Link>
+        {rows &&
+          groupTournaments(rows, true).map(({ title, list }) => (
+            <div key={title} className="mb-8 last:mb-0">
+              <h2 className="micro-label mb-3">{title}</h2>
+              <div className="space-y-3">
+                {list.map((t) => (
+                  <Link key={t.id} to={`/admin/tournois/${t.id}`} className="block">
+                    <Box className="flex items-center gap-3 px-4 py-4 transition-colors hover:bg-chalk/10">
+                      <div className="min-w-0 flex-1">
+                        <Tag tone={t.status === "draft" ? "out" : "neutral"}>{statusLabel(t.status, hasDraw(t))}</Tag>
+                        <h3 className="mt-2 font-display text-2xl leading-tight">{t.name}</h3>
+                        <p className="mt-1 text-sm text-chalk/85">
+                          {t.tour} · tableau {t.draw_size} · {formatDate(t.starts_at)}
+                        </p>
+                      </div>
+                      <ChevronRight className="size-5 shrink-0 text-chalk/80" />
+                    </Box>
+                  </Link>
+                ))}
+              </div>
+            </div>
           ))}
-        </div>
       </section>
 
       <section>
