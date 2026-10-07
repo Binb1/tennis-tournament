@@ -1,0 +1,163 @@
+/*
+ * Pixel animations (src/components/pixel). Stepped timing = pixel-art feel.
+ * Sprites sit in SVGs measured in pixels, so translate() values below are sprite pixels.
+ * .px-flash: visible for the first 10% of the loop and the last 8% (impact frames).
+ */
+
+/* ---- 1. Rally ---- */
+@keyframes px-rally-ball {
+  0% { transform: translate(0, 0); }
+  18% { transform: translate(34px, -12px); }
+  32% { transform: translate(50px, 8px); }
+  50% { transform: translate(66px, 0); }
+  68% { transform: translate(34px, -12px); }
+  82% { transform: translate(16px, 8px); }
+  100% { transform: translate(0, 0); }
+}
+@keyframes px-rally-shadow {
+  0% { transform: translateX(0); }
+  18% { transform: translateX(34px); }
+  32% { transform: translateX(50px); }
+  50% { transform: translateX(66px); }
+  68% { transform: translateX(34px); }
+  82% { transform: translateX(16px); }
+  100% { transform: translateX(0); }
+}
+@keyframes px-flash {
+  0% { opacity: 1; }
+  10% { opacity: 0; }
+  92% { opacity: 1; }
+}
+@keyframes px-flash-inv {
+  0% { opacity: 0; }
+  10% { opacity: 1; }
+  92% { opacity: 0; }
+}
+@keyframes px-puff {
+  0% { opacity: 0; }
+  32% { opacity: 1; }
+  40% { opacity: 0; }
+}
+.px-rally-ball { animation: px-rally-ball 1.8s linear infinite; }
+.px-rally-shadow { animation: px-rally-shadow 1.8s linear infinite; }
+.px-rally-swing { animation: px-flash 1.8s steps(1) infinite; }
+.px-rally-ready { animation: px-flash-inv 1.8s steps(1) infinite; }
+.px-rally-puff { animation: px-puff 1.8s steps(1) infinite; }
+.px-rally-other { animation-delay: -0.9s; }
+
+/* ---- 2. Pick won: jump + ball confetti ---- */
+@keyframes px-jump {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes px-confetti {
+  0% { transform: translate(0, 0); opacity: 1; }
+  55% { transform: translate(var(--dx), var(--dy)); opacity: 1; }
+  100% { transform: translate(var(--dx), calc(var(--dy) + 16px)); opacity: 0; }
+}
+.px-jump { animation: px-jump 0.4s steps(2) 4; }
+.px-confetti { animation: px-confetti 1.3s cubic-bezier(0.2, 0.7, 0.3, 1) both; animation-delay: var(--delay, 0s); }
+
+/* ---- 3. Pick lost: ball into the net ---- */
+@keyframes px-net-ball {
+  0% { transform: translate(0, 0); }
+  45% { transform: translate(22px, 8px); }
+  52% { transform: translate(20px, 9px); }
+  75% { transform: translate(19px, 22px); }
+  84% { transform: translate(17px, 19px); }
+  92% { transform: translate(15px, 22px); }
+  100% { transform: translate(14px, 22px); }
+}
+@keyframes px-net-wobble {
+  0%, 44% { transform: translateY(0); }
+  46% { transform: translateY(2px); }
+  52% { transform: translateY(-1px); }
+  58% { transform: translateY(1px); }
+  64%, 100% { transform: translateY(0); }
+}
+.px-net-ball { animation: px-net-ball 1.6s steps(24) both; }
+.px-net-tape { animation: px-net-wobble 1.6s steps(1) both; }
+
+/* ---- 6. Loader: bouncing ball ---- */
+@keyframes px-bounce {
+  0% { transform: translateY(0) scale(1.25, 0.75); }
+  12% { transform: translateY(-1px) scale(1, 1); }
+  50% { transform: translateY(-10px); }
+  88% { transform: translateY(-1px) scale(1, 1); }
+  100% { transform: translateY(0) scale(1.25, 0.75); }
+}
+@keyframes px-bounce-shadow {
+  0%, 100% { transform: scaleX(1); opacity: 0.45; }
+  50% { transform: scaleX(0.5); opacity: 0.2; }
+}
+.px-bounce {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: px-bounce 0.7s steps(3) infinite;
+}
+.px-bounce-shadow {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  animation: px-bounce-shadow 0.7s steps(3) infinite;
+}
+
+/* ---- 7. Lock countdown: ball boy + shot clock ---- */
+@keyframes px-run {
+  from { left: -32px; }
+  to { left: calc(100% + 8px); }
+}
+@keyframes px-step {
+  0% { opacity: 1; }
+  50% { opacity: 0; }
+}
+@keyframes px-step-inv {
+  0% { opacity: 0; }
+  50% { opacity: 1; }
+}
+@keyframes px-blink {
+  0% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+.px-run { animation: px-run 5s linear infinite; }
+.px-step { animation: px-step 0.3s steps(1) infinite; }
+.px-step-inv { animation: px-step-inv 0.3s steps(1) infinite; }
+.px-blink { animation: px-blink 1s steps(1) infinite; }
+
+/* ---- 9. Ranking: climb + podium ---- */
+@keyframes px-climb {
+  from { transform: translateY(var(--from, 0)); }
+  to { transform: translateY(0); }
+}
+@keyframes px-arrow {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes px-hop {
+  0%, 70%, 100% { transform: translateY(0); }
+  80% { transform: translateY(-3px); }
+}
+.px-climb { animation: px-climb 0.9s steps(6) both; animation-delay: 0.3s; }
+.px-arrow { animation: px-arrow 0.6s steps(2) infinite; }
+.px-hop { animation: px-hop 1.6s steps(1) infinite; animation-delay: var(--delay, 0s); }
+
+/* ---- 10. Logo: serve spin on hover / tap ---- */
+@keyframes px-serve {
+  0% { transform: translateY(0) rotate(0); }
+  50% { transform: translateY(-4px) rotate(180deg); }
+  100% { transform: translateY(0) rotate(360deg); }
+}
+.px-serve:hover .px-serve-ball,
+.px-serve:active .px-serve-ball,
+.px-serve-ball.px-serve-now {
+  animation: px-serve 0.6s steps(8);
+}
+
+/* Reduced motion: still images. Transient frames (swing, puff, confetti, ball boy) are hidden. */
+@media (prefers-reduced-motion: reduce) {
+  [class*="px-"] {
+    animation: none !important;
+  }
+  .px-transient {
+    opacity: 0 !important;
+  }
+}

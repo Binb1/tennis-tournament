@@ -6,6 +6,7 @@ import { BallMark } from "@/components/court/BallMark"
 import { SurfaceMenu } from "@/components/court/SurfacePicker"
 import { useAuth } from "@/lib/auth"
 import { cn } from "@/lib/utils"
+import "@/components/pixel/pixel.css"
 
 /**
  * Clay-court building blocks for the app screens.
@@ -42,8 +43,8 @@ export function SiteHeader({ children }: { children?: ReactNode }) {
     <header className="relative z-20">
       <div className="wall">
         <div className="mx-auto flex max-w-[600px] items-center justify-between gap-2 px-4 py-1.5 md:py-4">
-          <Link to={session ? "/tournois" : "/"} className="flex min-h-11 shrink-0 items-center gap-2 font-brand text-lg leading-none min-[400px]:text-xl">
-            <BallMark />
+          <Link to={session ? "/tournois" : "/"} className="px-serve flex min-h-11 shrink-0 items-center gap-2 font-brand text-lg leading-none min-[400px]:text-xl">
+            <BallMark className="px-serve-ball" />
             Tiebreakers
           </Link>
           <div className="flex items-center gap-2 min-[400px]:gap-3">
