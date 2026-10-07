@@ -164,6 +164,14 @@ function StatusSection({ data, onChanged }: Props) {
     })
   }
 
+  function setLateJoin(on: boolean) {
+    return run("late_join", async () => {
+      const res = await supabase.from("tournaments").update({ late_join: on }).eq("id", data.t.id)
+      if (!res.error) await logAdmin("set_late_join", { tournament_id: data.t.id, late_join: on })
+      return res
+    })
+  }
+
   return (
     <Section title="Statut">
       <div className="mb-4 flex flex-wrap gap-1.5">
@@ -179,6 +187,21 @@ function StatusSection({ data, onChanged }: Props) {
           </span>
         ))}
       </div>
+      <label className="mb-4 flex max-w-md cursor-pointer items-start gap-3">
+        <input
+          type="checkbox"
+          className="mt-0.5 size-5 shrink-0 accent-[var(--color-chalk)]"
+          checked={data.t.late_join}
+          disabled={!!busy}
+          onChange={(e) => setLateJoin(e.target.checked)}
+        />
+        <span>
+          <span className="block font-medium">Laisser les non-inscrits rejoindre en cours de tournoi</span>
+          <span className="block text-xs text-chalk/80">
+            Tant qu'un tour est ouvert. Les tours déjà joués sont repêchés pour eux.
+          </span>
+        </span>
+      </label>
       <div className="flex flex-wrap gap-3">
         {next && (
           <ChalkButton onClick={() => move(next)} disabled={!!busy}>

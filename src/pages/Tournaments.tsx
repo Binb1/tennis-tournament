@@ -148,6 +148,9 @@ function TournamentCard({
               {open.name} · verrouillage dans <span className="tabular-nums">{formatLeft(ms, false)}</span>
             </p>
           )}
+          {!me && t.status === "live" && t.late_join && open && ms > 0 && (
+            <p className="mt-1 text-sm">Inscriptions encore ouvertes</p>
+          )}
           {me && <MyPickLine me={me} last={last} open={open && ms > 0 ? open : undefined} />}
         </div>
         <ChevronRight className="size-5 shrink-0 text-chalk/80" />

@@ -22,3 +22,6 @@ npm-debug.log*
 !.vscode/extensions.json
 .idea
 *.local
+
+# supabase CLI cache (supabase link)
+supabase/.temp

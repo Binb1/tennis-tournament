@@ -29,7 +29,14 @@ export type Tournament = {
   external_id?: string | null
   /** Style (theme id) painted on this tournament's pages; null = the player's choice. */
   theme?: string | null
+  /** Admin toggle: people can join while live (a round still open); missed rounds are waived. Migration 0009. */
+  late_join: boolean
 }
+
+/** Joining: during registration, or while live with late sign-ups on and a round still open. */
+export const canJoin = (t: Tournament, rounds: Round[], now: number) =>
+  t.status === "registration" ||
+  (t.status === "live" && t.late_join && rounds.some((r) => new Date(r.locks_at).getTime() > now))
 
 export type Round = { id: string; tournament_id: string; idx: number; name: string; locks_at: string }
 export type Player = {
