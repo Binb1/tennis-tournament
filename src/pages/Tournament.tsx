@@ -19,6 +19,7 @@ import {
   type EntryStatus,
   type Match,
   type Pick,
+  type Waiver,
   type Player,
   type PlayerResult,
   type Round,
@@ -38,9 +39,10 @@ type Data = {
   entries: EntryRow[]
   statuses: EntryStatus[]
   picks: Pick[]
+  waivers: Waiver[]
   matches: Match[]
 }
-type ChipState = "won" | "lost" | "pending" | "missing" | "open"
+type ChipState = "won" | "lost" | "pending" | "missing" | "waived" | "open"
 type TrailStep = { round: Round; state: ChipState; player?: Player }
 
 async function load(id: string): Promise<Data> {
@@ -51,7 +53,7 @@ async function load(id: string): Promise<Data> {
   if (r.error) throw new Error(r.error.message)
   const rounds = r.data as Round[]
   const roundIds = rounds.map((x) => x.id)
-  const [players, results, entries, statuses, picks, matches] = await Promise.all([
+  const [players, results, entries, statuses, picks, waivers, matches] = await Promise.all([
     fetchAll<Player>((a, b) => supabase.from("players").select("id, name, seed, country, ranking").eq("tournament_id", id).order("name").range(a, b)),
     fetchAll<PlayerResult>((a, b) =>
       supabase.from("player_results").select("player_id, round_id, result").in("round_id", roundIds).order("player_id").order("round_id").range(a, b),
@@ -63,9 +65,10 @@ async function load(id: string): Promise<Data> {
     fetchAll<Pick>((a, b) =>
       supabase.from("picks").select("entry_id, round_id, player_id").in("round_id", roundIds).order("entry_id").order("round_id").range(a, b),
     ),
+    fetchAll<Waiver>((a, b) => supabase.from("pick_waivers").select("entry_id, round_id").in("round_id", roundIds).order("entry_id").order("round_id").range(a, b)),
     fetchAll<Match>((a, b) => supabase.from("matches").select("*").eq("tournament_id", id).order("id").range(a, b)),
   ])
-  return { t: t as Tournament, rounds, players, results, entries, statuses, picks, matches }
+  return { t: t as Tournament, rounds, players, results, entries, statuses, picks, waivers, matches }
 }
 
 /** Keyed by id: going from one tournament to another (back/forward) starts from a clean state. */
@@ -204,6 +207,9 @@ function derive(data: Data, uid: string | undefined, now: number) {
   }
 
   const locked = (r: Round) => new Date(r.locks_at).getTime() <= now
+  const waived = new Set(data.waivers.map((w) => `${w.entry_id}:${w.round_id}`))
+  /** A locked round without a pick: "repêché" when the admin waived it, else out. */
+  const noPick = (entryId: string, r: Round): ChipState => (waived.has(`${entryId}:${r.id}`) ? "waived" : "missing")
   const currentRound = data.rounds.find((r) => !locked(r)) ?? null
 
   function trail(entryId: string): TrailStep[] {
@@ -214,7 +220,7 @@ function derive(data: Data, uid: string | undefined, now: number) {
       .map((round): TrailStep => {
         const pid = picks?.get(round.id)
         const player = pid ? playerById.get(pid) : undefined
-        if (!pid) return { round, state: locked(round) ? "missing" : "open" }
+        if (!pid) return { round, state: locked(round) ? noPick(entryId, round) : "open" }
         const res = result.get(`${pid}:${round.id}`)
         return { round, player, state: res === "won" ? "won" : res === "lost" ? "lost" : "pending" }
       })
@@ -231,7 +237,7 @@ function derive(data: Data, uid: string | undefined, now: number) {
     if (m.player2_id) matchOf.set(`${m.round_id}:${m.player2_id}`, m)
   }
 
-  return { result, playerById, picksByEntry, roundByIdx, statusByEntry, lostRound, currentRound, locked, trail, myEntry, myStatus, myPicks, matchOf }
+  return { result, playerById, picksByEntry, roundByIdx, statusByEntry, lostRound, currentRound, locked, noPick, trail, myEntry, myStatus, myPicks, matchOf }
 }
 type Derived = ReturnType<typeof derive>
 
@@ -270,6 +276,7 @@ const CHIP_STYLE: Record<ChipState, string> = {
   lost: "bg-ink/80 text-chalk-dim border-ink/80 line-through",
   pending: "border-chalk text-chalk",
   missing: "border-dashed border-chalk/70 text-chalk/80",
+  waived: "border-dashed border-chalk text-chalk",
   open: "border-chalk/40 text-chalk/70",
 }
 const CHIP_LABEL: Record<ChipState, string> = {
@@ -277,6 +284,7 @@ const CHIP_LABEL: Record<ChipState, string> = {
   lost: "perdu",
   pending: "en attente",
   missing: "aucun choix",
+  waived: "repêché",
   open: "à choisir",
 }
 
@@ -667,6 +675,7 @@ const CELL_STYLE: Record<ChipState, string> = {
   lost: "bg-clay-deep text-chalk-dim line-through",
   pending: "text-chalk",
   missing: "text-chalk/60",
+  waived: "text-chalk italic",
   open: "text-chalk/60",
 }
 
@@ -726,7 +735,7 @@ function Grid({
                   const pid = picks?.get(r.id)
                   const player = pid ? d.playerById.get(pid) : undefined
                   const res = pid ? d.result.get(`${pid}:${r.id}`) : undefined
-                  const state: ChipState = !pid ? "missing" : res === "won" ? "won" : res === "lost" ? "lost" : "pending"
+                  const state: ChipState = !pid ? d.noPick(row.e.id, r) : res === "won" ? "won" : res === "lost" ? "lost" : "pending"
                   return (
                     <td
                       key={r.id}
@@ -738,6 +747,8 @@ function Grid({
                           <Flag code={player.country} />
                           {shortName(player.name)}
                         </span>
+                      ) : state === "waived" ? (
+                        "repêché"
                       ) : (
                         "–"
                       )}

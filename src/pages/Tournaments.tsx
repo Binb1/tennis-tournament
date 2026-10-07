@@ -10,26 +10,19 @@ import {
   fetchLastPicks,
   fetchWinners,
   formatDate,
+  groupTournaments,
+  hasDraw,
   statusLabel,
   supabase,
   type EntryStatus,
   type LastPick,
   type Round,
   type Tournament,
+  type WithDraw,
 } from "@/lib/supabase"
 import { formatLeft, useNow } from "@/lib/time"
 
-type Row = Tournament & { entries: { count: number }[]; players: { count: number }[] }
-
-const hasDraw = (t: Row) => (t.players[0]?.count ?? 0) > 0
-
-/** Registration only counts as open once the draw is imported. Upcoming groups: soonest first; finished: latest first. */
-const GROUPS: { title: string; match: (t: Row) => boolean; latestFirst?: boolean }[] = [
-  { title: "Ouverts", match: (t) => t.status === "registration" && hasDraw(t) },
-  { title: "En cours", match: (t) => t.status === "live" },
-  { title: "À venir", match: (t) => t.status === "registration" && !hasDraw(t) },
-  { title: "Terminés", match: (t) => t.status === "finished", latestFirst: true },
-]
+type Row = WithDraw & { entries: { count: number }[] }
 
 export default function Tournaments() {
   const { session } = useAuth()
@@ -88,13 +81,10 @@ export default function Tournaments() {
       {!rows && !error && <Loading />}
       {rows && rows.length === 0 && <p className="py-8 text-center text-chalk/85">Aucun tournoi pour l'instant.</p>}
       {rows &&
-        GROUPS.map((g) => {
-          const list = rows.filter(g.match)
-          if (!g.latestFirst) list.reverse()
-          if (!list.length) return null
+        groupTournaments(rows).map(({ title, list }) => {
           return (
-            <section key={g.title} className="mb-8">
-              <h2 className="micro-label mb-3">{g.title}</h2>
+            <section key={title} className="mb-8">
+              <h2 className="micro-label mb-3">{title}</h2>
               <div className="space-y-3">
                 {list.map((t) => (
                   <TournamentCard

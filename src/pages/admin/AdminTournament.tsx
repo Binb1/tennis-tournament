@@ -19,6 +19,7 @@ import {
   type Round,
   type Tournament,
   type TournamentStatus,
+  type Waiver,
 } from "@/lib/supabase"
 
 type ResultRow = { player_id: string; round_id: string; result: "won" | "lost" | null; source: "manual" | "api" }
@@ -32,6 +33,7 @@ type Data = {
   entries: EntryRow[]
   statuses: EntryStatus[]
   picks: Pick[]
+  waivers: Waiver[]
   log: LogRow[]
 }
 
@@ -45,7 +47,7 @@ async function load(id: string): Promise<Data> {
   if (r.error) throw new Error(r.error.message)
   const rounds = r.data as Round[]
   const roundIds = rounds.map((x) => x.id)
-  const [players, results, entries, statuses, picks, log] = await Promise.all([
+  const [players, results, entries, statuses, picks, waivers, log] = await Promise.all([
     fetchAll<Player>((a, b) => supabase.from("players").select("id, name, seed").eq("tournament_id", id).order("seed").order("name").range(a, b)),
     fetchAll<ResultRow>((a, b) =>
       supabase.from("player_results").select("player_id, round_id, result, source").in("round_id", roundIds).order("player_id").order("round_id").range(a, b),
@@ -55,10 +57,11 @@ async function load(id: string): Promise<Data> {
     ),
     fetchAll<EntryStatus>((a, b) => supabase.from("entry_status").select("*").eq("tournament_id", id).order("entry_id").range(a, b)),
     fetchAll<Pick>((a, b) => supabase.from("picks").select("entry_id, round_id, player_id").in("round_id", roundIds).order("entry_id").order("round_id").range(a, b)),
+    fetchAll<Waiver>((a, b) => supabase.from("pick_waivers").select("entry_id, round_id").in("round_id", roundIds).order("entry_id").order("round_id").range(a, b)),
     supabase.from("admin_log").select("id, action, payload, at, profiles(username)").order("at", { ascending: false }).limit(50),
   ])
   if (log.error) throw new Error(log.error.message)
-  return { t: t as Tournament, rounds, players, results, entries, statuses, picks, log: log.data as unknown as LogRow[] }
+  return { t: t as Tournament, rounds, players, results, entries, statuses, picks, waivers, log: log.data as unknown as LogRow[] }
 }
 
 /** ISO -> value for <input type="datetime-local"> (local time). */
@@ -707,6 +710,25 @@ function EntriesSection({ data, onChanged }: Props) {
   const [playerId, setPlayerId] = useState("")
   const statusOf = new Map(data.statuses.map((s) => [s.entry_id, s]))
   const roundName = (idx: number | null) => data.rounds.find((r) => r.idx === idx)?.name ?? ""
+  const hasPick = (entryId: string, roundId: string) => data.picks.some((p) => p.entry_id === entryId && p.round_id === roundId)
+  /** The round an entry went out in for lack of a pick (the one a waiver can rescue). */
+  const missedRound = (entryId: string) => {
+    const r = data.rounds.find((x) => x.idx === statusOf.get(entryId)?.eliminated_round)
+    return r && !hasPick(entryId, r.id) ? r : undefined
+  }
+  const waiversOf = (entryId: string) =>
+    data.waivers.filter((w) => w.entry_id === entryId).map((w) => data.rounds.find((r) => r.id === w.round_id)!).filter(Boolean)
+
+  function waive(e: EntryRow, round: Round, waived: boolean) {
+    const who = displayName(e.profiles)
+    const ask = waived
+      ? `Repêcher ${who} au ${round.name} ? Son absence de choix ne l'élimine plus.`
+      : `Annuler le repêchage de ${who} au ${round.name} ? Sans choix, il sera de nouveau éliminé.`
+    if (!confirm(ask)) return
+    return run(`waive:${e.id}`, () =>
+      supabase.rpc("admin_waive_round", { p_entry_id: e.id, p_round_id: round.id, p_waived: waived }),
+    )
+  }
 
   function openPick(entryId: string) {
     const r = data.rounds.find((x) => new Date(x.locks_at).getTime() > Date.now()) ?? data.rounds[0]
@@ -733,6 +755,8 @@ function EntriesSection({ data, onChanged }: Props) {
       <ul className="space-y-0">
         {data.entries.map((e) => {
           const s = statusOf.get(e.id)
+          const missed = missedRound(e.id)
+          const waived = waiversOf(e.id)
           return (
             <li key={e.id} className="border-t-2 border-chalk/40 py-3 first:border-t-0 first:pt-0">
               <div className="flex flex-wrap items-center gap-2">
@@ -753,6 +777,34 @@ function EntriesSection({ data, onChanged }: Props) {
                   Retirer
                 </button>
               </div>
+              {(missed || waived.length > 0) && (
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                  {missed && (
+                    <>
+                      <span className="text-chalk/85">Aucun choix au {missed.name}</span>
+                      <button
+                        onClick={() => waive(e, missed, true)}
+                        disabled={!!busy}
+                        className="font-bold underline underline-offset-4 disabled:opacity-50"
+                      >
+                        Repêcher
+                      </button>
+                    </>
+                  )}
+                  {waived.map((r) => (
+                    <span key={r.id} className="inline-flex items-center gap-2">
+                      <Tag tone="neutral">Repêché · {r.name}</Tag>
+                      <button
+                        onClick={() => waive(e, r, false)}
+                        disabled={!!busy}
+                        className="font-bold underline underline-offset-4 disabled:opacity-50"
+                      >
+                        Annuler
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
               {editing === e.id && (
                 <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
                   <select
