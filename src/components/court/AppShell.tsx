@@ -20,6 +20,7 @@ export function AppShell({ children, bare = false }: { children: ReactNode; bare
         {!bare && (
           <nav className="flex gap-3 text-sm font-medium min-[400px]:gap-4">
             <NavItem to="/tournois">Tournois</NavItem>
+            <NavItem to="/saison">Saison</NavItem>
             <NavItem to="/profil">Profil</NavItem>
             {profile?.is_admin && <NavItem to="/admin">Admin</NavItem>}
           </nav>
