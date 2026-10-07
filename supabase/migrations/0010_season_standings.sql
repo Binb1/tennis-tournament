@@ -1,7 +1,7 @@
 -- Season ranking (calendar year of the tournament's start).
 -- 10 points per round won with a real pick (waived rounds score nothing), +50 per tournament won.
--- Winners as in the app (fetchWinners): alive after the final; if nobody is, the entries with the most rounds
--- survived are co-winners, but only if they survived at least one round.
+-- Won = still alive after the final, or (nobody is) knocked out in the final itself. Going out earlier never
+-- earns the bonus, even when the app's co-winner rule names you (e.g. everyone stopped picking after round 1).
 -- Counts live and finished tournaments; only locked rounds, so nothing leaks before a lock.
 -- Both views run as their owner (like entry_status) to read everyone's picks; they only expose totals.
 
@@ -22,9 +22,10 @@ won as (
   group by s.entry_id
 ),
 fin as (
-  select s.entry_id, s.alive, s.rounds_survived,
-         bool_or(s.alive) over (partition by s.tournament_id) as any_alive,
-         max(s.rounds_survived) over (partition by s.tournament_id) as best
+  select s.entry_id,
+         s.alive or s.eliminated_round = (select max(idx) from rounds where tournament_id = s.tournament_id) as reached_final,
+         s.alive,
+         bool_or(s.alive) over (partition by s.tournament_id) as any_alive
   from entry_status s join t on t.id = s.tournament_id
   where t.status = 'finished'
 )
@@ -39,11 +40,9 @@ select
   s.alive,
   s.eliminated_round,
   coalesce(w.n, 0) as rounds_won,
-  coalesce((f.any_alive and f.alive) or (not f.any_alive and f.best > 0 and f.rounds_survived = f.best), false)
-    as won_tournament,
+  coalesce(f.alive or (not f.any_alive and f.reached_final), false) as won_tournament,
   (10 * coalesce(w.n, 0)
-   + case when coalesce((f.any_alive and f.alive) or (not f.any_alive and f.best > 0 and f.rounds_survived = f.best), false)
-          then 50 else 0 end)::int as points
+   + case when coalesce(f.alive or (not f.any_alive and f.reached_final), false) then 50 else 0 end)::int as points
 from entries e
 join t on t.id = e.tournament_id
 join entry_status s on s.entry_id = e.id
