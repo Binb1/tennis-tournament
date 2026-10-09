@@ -274,9 +274,20 @@ function RoundRow({ round, onChanged }: { round: Round; onChanged: () => Promise
 
   function save() {
     return run("save", async () => {
-      const patch = { name: name.trim(), locks_at: new Date(locksAt).toISOString() }
+      const lockChanged = locksAt !== toLocalInput(round.locks_at)
+      // A lock set by hand is pinned: the sync no longer moves it to the first scheduled match.
+      const patch = { name: name.trim(), locks_at: new Date(locksAt).toISOString(), ...(lockChanged ? { locks_at_manual: true } : {}) }
       const res = await supabase.from("rounds").update(patch).eq("id", round.id)
       if (!res.error) await logAdmin("update_round", { round_id: round.id, ...patch })
+      return res
+    })
+  }
+
+  /** Back to automatic: the next sync sets the lock to the round's first scheduled match. */
+  function unpin() {
+    return run("unpin", async () => {
+      const res = await supabase.from("rounds").update({ locks_at_manual: false }).eq("id", round.id)
+      if (!res.error) await logAdmin("update_round", { round_id: round.id, locks_at_manual: false })
       return res
     })
   }
@@ -287,7 +298,18 @@ function RoundRow({ round, onChanged }: { round: Round; onChanged: () => Promise
     <li className="border-t-2 border-chalk/40 pt-4 first:border-t-0 first:pt-0">
       <div className="mb-2 flex items-center justify-between gap-2">
         <span className="micro-label">Tour {round.idx}</span>
-        {locked && <Tag tone="out">Verrouillé</Tag>}
+        {locked ? (
+          <Tag tone="out">Verrouillé</Tag>
+        ) : round.locks_at_manual ? (
+          <span className="flex items-center gap-2">
+            <Tag tone="alert">Manuel</Tag>
+            <LineButton onClick={unpin} disabled={!!busy}>
+              Repasser en auto
+            </LineButton>
+          </span>
+        ) : (
+          <Tag tone="neutral">Auto · 1er match</Tag>
+        )}
       </div>
       <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
         <input aria-label="Nom du tour" className={input} value={name} disabled={locked} onChange={(e) => setName(e.target.value)} />
