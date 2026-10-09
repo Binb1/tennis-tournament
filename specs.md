@@ -118,7 +118,7 @@ Five screens cover the whole player experience.
 The admin sets up a tournament once, then only confirms results round by round.
 
 1. **Create tournament:** name, tour (ATP/WTA), draw size, starts_at, optional external API id. Rounds are generated from the draw size (names editable).
-2. **Rounds:** set `locks_at` per round (default: first scheduled match of that round). Editable until the round locks.
+2. **Rounds:** `locks_at` per round follows the first scheduled match of that round (set by the sync; while the previous round is still being played and the schedule isn't out, the round stays open). An admin edit pins the lock ("Manuel", can go back to auto). Editable until the round locks.
 3. **Draw import:** paste a CSV (name, seed, external_id) or import from the API. Players can be added or removed until the tournament goes live (qualifiers, lucky losers).
 4. **Results:** one card per round listing the players still in. Tap to mark each as advanced or lost. API sync pre-fills these; the admin can override any value.
 5. **Corrections:** changing a past result instantly recomputes every entry (the demo's "uncheck and everything recolors").
@@ -214,9 +214,9 @@ Sources: pages above, checked 2026-09-25.
 | Player plays before the round lock (schedule change) | Admin moves locks_at earlier; picks of that player after his match starts are rejected only by lock time, so keep locks conservative |
 | No pickable player left (all remaining players already used) | Out at that round (same as no pick) |
 | Admin corrects a past result | Everything recomputes; eliminated users can come back to life |
-| Round result incomplete | Entries picking unfinished players stay pending; the next round's lock still applies |
+| Round result incomplete | Entries picking unfinished players stay pending; the next round's lock still applies. A player picked for round N who then loses in an earlier round counts as a loss in round N |
 | All remaining entries eliminated in the same round | Open question: they all become co-winners, or nobody wins |
-| Rain delays push matches past the next lock | Open question: admin extends the next locks_at, or allow picking pending players at risk |
+| Rain delays push matches past the next lock | Picking players still to play is allowed, at your risk (see above); locks follow the synced schedule |
 | User deletes account | Entry kept, username shown as "deleted user" |
 
 ## Out of scope / later
@@ -243,7 +243,7 @@ The v1 schema already leaves room for each of these without a migration of exist
 ## Open questions
 
 - [ ] All remaining entries lose in the same round: co-winners or nobody?
-- [ ] Rain delays past the next lock: extend the lock by hand, or let people pick unfinished players?
+- [x] Rain delays past the next lock: people may pick unfinished players at their risk; locks follow the schedule.
 - [ ] Which API after testing?
 
 ## Build & deployment

@@ -57,7 +57,8 @@ function playerFinder(players: { id: string; name: string; external_id: string |
   return (s: Side | null): string | null => (s ? byExt.get(s.external_id) ?? byName.get(norm(s.name)) ?? null : null)
 }
 
-/** Upserts one matches row per bracket slot (key: tournament + "<roundId>-<slot>"). Returns the parsed slots. */
+/** Upserts one matches row per bracket slot (key: tournament + "<roundId>-<slot>"), then aligns the open rounds'
+ * lock times on the schedule. Returns the parsed slots. */
 async function upsertMatches(db: Db, t: Tournament, draw: unknown): Promise<Slot[]> {
   const [{ data: players }, { data: rounds }] = await Promise.all([
     db.from("players").select("id, name, external_id").eq("tournament_id", t.id),
@@ -88,6 +89,9 @@ async function upsertMatches(db: Db, t: Tournament, draw: unknown): Promise<Slot
   if (rows.length) {
     const { error } = await db.from("matches").upsert(rows, { onConflict: "tournament_id,external_id" })
     if (error) throw new Error(error.message)
+    // Open rounds lock at their first scheduled match (migration 0011).
+    const { error: lockErr } = await db.rpc("align_round_locks", { p_tournament_id: t.id })
+    if (lockErr) throw new Error(lockErr.message)
   }
   return slots
 }

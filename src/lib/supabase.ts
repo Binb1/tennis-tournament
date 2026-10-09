@@ -38,7 +38,15 @@ export const canJoin = (t: Tournament, rounds: Round[], now: number) =>
   t.status === "registration" ||
   (t.status === "live" && t.late_join && rounds.some((r) => new Date(r.locks_at).getTime() > now))
 
-export type Round = { id: string; tournament_id: string; idx: number; name: string; locks_at: string }
+export type Round = {
+  id: string
+  tournament_id: string
+  idx: number
+  name: string
+  locks_at: string
+  /** Lock set by the admin: the sync stops aligning it on the first scheduled match. Migration 0011. */
+  locks_at_manual?: boolean
+}
 export type Player = {
   id: string
   name: string

@@ -212,6 +212,10 @@ function derive(data: Data, uid: string | undefined, now: number) {
     picksByEntry.get(p.entry_id)!.set(p.round_id, p.player_id)
   }
 
+  /** Result of a pick: a player who already lost in an earlier round never plays this one, so the pick is lost. */
+  const pickResult = (pid: string, r: Round): "won" | "lost" | undefined =>
+    result.get(`${pid}:${r.id}`) ?? ((lostRound.get(pid) ?? Infinity) < r.idx ? "lost" : undefined)
+
   const locked = (r: Round) => new Date(r.locks_at).getTime() <= now
   const waived = new Set(data.waivers.map((w) => `${w.entry_id}:${w.round_id}`))
   /** A locked round without a pick: "repêché" when the admin waived it, else out. */
@@ -227,7 +231,7 @@ function derive(data: Data, uid: string | undefined, now: number) {
         const pid = picks?.get(round.id)
         const player = pid ? playerById.get(pid) : undefined
         if (!pid) return { round, state: locked(round) ? noPick(entryId, round) : "open" }
-        const res = result.get(`${pid}:${round.id}`)
+        const res = pickResult(pid, round)
         return { round, player, state: res === "won" ? "won" : res === "lost" ? "lost" : "pending" }
       })
   }
@@ -243,7 +247,7 @@ function derive(data: Data, uid: string | undefined, now: number) {
     if (m.player2_id) matchOf.set(`${m.round_id}:${m.player2_id}`, m)
   }
 
-  return { result, playerById, picksByEntry, roundByIdx, statusByEntry, lostRound, currentRound, locked, noPick, trail, myEntry, myStatus, myPicks, matchOf }
+  return { result, playerById, picksByEntry, roundByIdx, statusByEntry, lostRound, pickResult, currentRound, locked, noPick, trail, myEntry, myStatus, myPicks, matchOf }
 }
 type Derived = ReturnType<typeof derive>
 
@@ -382,7 +386,7 @@ function MyPick({ data, d, onChanged }: { data: Data; d: Derived; onChanged: () 
           <strong className="font-bold">
             <PlayerName p={d.playerById.get(statusPid)} />
           </strong>
-          <ResultTag result={d.result.get(`${statusPid}:${statusRound.id}`)} />
+          <ResultTag result={d.pickResult(statusPid, statusRound)} />
         </div>
       )}
 
@@ -740,7 +744,7 @@ function Grid({
                   if (row.out != null && r.idx > row.out) return <td key={r.id} className="border-l-2 border-chalk/40" />
                   const pid = picks?.get(r.id)
                   const player = pid ? d.playerById.get(pid) : undefined
-                  const res = pid ? d.result.get(`${pid}:${r.id}`) : undefined
+                  const res = pid ? d.pickResult(pid, r) : undefined
                   const state: ChipState = !pid ? d.noPick(row.e.id, r) : res === "won" ? "won" : res === "lost" ? "lost" : "pending"
                   return (
                     <td
@@ -782,7 +786,7 @@ function Distribution({ data, d, rounds }: { data: Data; d: Derived; rounds: Rou
         for (const p of data.picks) if (p.round_id === r.id) counts.set(p.player_id, (counts.get(p.player_id) ?? 0) + 1)
         const total = [...counts.values()].reduce((a, b) => a + b, 0)
         const list = [...counts]
-          .map(([pid, n]) => ({ p: d.playerById.get(pid), pid, n, lost: d.result.get(`${pid}:${r.id}`) === "lost" }))
+          .map(([pid, n]) => ({ p: d.playerById.get(pid), pid, n, lost: d.pickResult(pid, r) === "lost" }))
           .sort((a, b) => b.n - a.n || (a.p?.name ?? "").localeCompare(b.p?.name ?? ""))
         return (
           <Box key={r.id} className="px-4 py-4">
@@ -847,7 +851,7 @@ function Stats({
   const picked = rounds.flatMap((r) => {
     const byPlayer = new Map<string, string[]>()
     for (const p of data.picks) if (p.round_id === r.id) byPlayer.set(p.player_id, [...(byPlayer.get(p.player_id) ?? []), p.entry_id])
-    return [...byPlayer].map(([pid, entries]) => ({ r, pid, entries, res: d.result.get(`${pid}:${r.id}`) ?? null }))
+    return [...byPlayer].map(([pid, entries]) => ({ r, pid, entries, res: d.pickResult(pid, r) ?? null }))
   })
   const bold = picked
     .filter((x) => x.res === "won")
