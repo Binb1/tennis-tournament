@@ -36,7 +36,7 @@ flowchart LR
 Each round you pick one player who must win his match; lose once and you're out.
 
 1. **Joining:** one global pool per tournament. Anyone logged in can join while the tournament is in registration. Joining closes when the tournament goes live.
-2. **One pick per round:** pick a player still in the draw. You can change it until the round's lock time.
+2. **One pick per round:** pick a player still in the draw. You can pick every round ahead of time (R1 to the final, from day one) and change or remove each pick until that round's lock time. A queued player who loses before his round counts as a loss there; the app warns so you can swap him.
 3. **No repeats:** a player can be picked only once per entry across the whole tournament.
 4. **Lock:** at `locks_at` for the round, picks freeze. Other players' picks become visible only after lock.
 5. **Elimination:** you're out if your pick loses, or if you have no pick at lock.
@@ -82,11 +82,11 @@ stateDiagram-v2
 | Status | Visible to players | Join | Pick |
 |---|---|---|---|
 | draft | No | No | No |
-| registration | Yes | Yes | Round 1 only |
-| live | Yes | No | Current round, until lock |
+| registration | Yes | Yes | Every round, each until its lock |
+| live | Yes | No | Every open round, each until its lock |
 | finished | Yes | No | No |
 
-Round 1 picks open during registration so people can pick as soon as they join. The current round is the first round whose `locks_at` is in the future.
+Picks open during registration so people can fill their whole path as soon as they join. The current round is the first round whose `locks_at` is in the future.
 
 ## Player screens & flows
 
@@ -159,7 +159,8 @@ All rules live in the database. The browser can read public data and call 3 func
 | Function | Who | Checks |
 |---|---|---|
 | join_tournament(tournament_id) | Logged-in user | Tournament in registration, not already joined |
-| make_pick(round_id, player_id) | Logged-in user | Own entry, entry alive, now() < locks_at (database clock), player in this tournament and not out, player not already used |
+| make_pick(round_id, player_id) | Logged-in user | Own entry, entry alive, now() < locks_at of that round (database clock), player in this tournament and not out, player not already used |
+| clear_pick(round_id) | Logged-in user | Own pick, now() < locks_at |
 | set_result(player_id, round_id, result) | Admin only | is_admin(); writes to admin_log |
 
 ### Tables

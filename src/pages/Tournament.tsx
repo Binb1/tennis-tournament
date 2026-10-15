@@ -222,11 +222,12 @@ function derive(data: Data, uid: string | undefined, now: number) {
   const noPick = (entryId: string, r: Round): ChipState => (waived.has(`${entryId}:${r.id}`) ? "waived" : "missing")
   const currentRound = data.rounds.find((r) => !locked(r)) ?? null
 
-  function trail(entryId: string): TrailStep[] {
+  /** Locked rounds + the current one; `all` adds the later open rounds too (my queued picks). */
+  function trail(entryId: string, all = false): TrailStep[] {
     const picks = picksByEntry.get(entryId)
     const out = statusByEntry.get(entryId)?.eliminated_round ?? Infinity
     return data.rounds
-      .filter((r) => r.idx <= out && (locked(r) || r.id === currentRound?.id))
+      .filter((r) => r.idx <= out && (all || locked(r) || r.id === currentRound?.id))
       .map((round): TrailStep => {
         const pid = picks?.get(round.id)
         const player = pid ? playerById.get(pid) : undefined
@@ -235,6 +236,11 @@ function derive(data: Data, uid: string | undefined, now: number) {
         return { round, player, state: res === "won" ? "won" : res === "lost" ? "lost" : "pending" }
       })
   }
+
+  const livePicks = data.picks.filter((p) => {
+    const out = statusByEntry.get(p.entry_id)?.eliminated_round
+    return out == null || (idxOf.get(p.round_id) ?? 0) <= out
+  })
 
   const myEntry = data.entries.find((e) => e.user_id && e.user_id === uid) ?? null
   const myStatus = myEntry ? statusByEntry.get(myEntry.id) ?? null : null
@@ -247,7 +253,7 @@ function derive(data: Data, uid: string | undefined, now: number) {
     if (m.player2_id) matchOf.set(`${m.round_id}:${m.player2_id}`, m)
   }
 
-  return { result, playerById, picksByEntry, roundByIdx, statusByEntry, lostRound, pickResult, currentRound, locked, noPick, trail, myEntry, myStatus, myPicks, matchOf }
+  return { result, playerById, picksByEntry, livePicks, roundByIdx, statusByEntry, lostRound, pickResult, currentRound, locked, noPick, trail, myEntry, myStatus, myPicks, matchOf }
 }
 type Derived = ReturnType<typeof derive>
 
@@ -326,10 +332,12 @@ function MyPick({ data, d, onChanged }: { data: Data; d: Derived; onChanged: () 
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [q, setQ] = useState("")
-  // Picks are open during registration (round 1 only) and live.
+  const [roundId, setRoundId] = useState<string | null>(null)
+  // Picks are open during registration and live, for every round not locked yet (queued picks).
   const status = data.t.status
-  const round =
-    status === "live" || (status === "registration" && d.currentRound?.idx === 1) ? d.currentRound : null
+  const openRounds = status === "live" || status === "registration" ? data.rounds.filter((r) => !d.locked(r)) : []
+  // The chosen round, or the current one (also when the chosen round just locked).
+  const round = openRounds.find((r) => r.id === roundId) ?? openRounds[0] ?? null
 
   if (!d.myEntry) {
     return (
@@ -341,23 +349,32 @@ function MyPick({ data, d, onChanged }: { data: Data; d: Derived; onChanged: () 
     )
   }
 
-  const trail = d.trail(d.myEntry.id)
+  const trail = d.trail(d.myEntry.id, true)
   const alive = d.myStatus?.alive ?? true
   const pickedId = round ? d.myPicks.get(round.id) : undefined
+  const isCurrent = !!round && round.id === d.currentRound?.id
   // Round of the status line: the open round, else (live) the last locked one.
   const lockedRounds = data.rounds.filter(d.locked)
   const statusRound = round ?? (status === "live" ? lockedRounds[lockedRounds.length - 1] : undefined)
   const statusPid = statusRound ? d.myPicks.get(statusRound.id) : undefined
   const roundName = (idx: number) => d.roundByIdx.get(idx)?.name ?? `tour ${idx}`
+  // Queued players who lost before their round: that pick is a loss unless changed before the lock.
+  const stale = openRounds.filter((r) => {
+    const pid = d.myPicks.get(r.id)
+    return pid && d.lostRound.has(pid)
+  })
 
   // Why a player can't be picked, or null if he can.
   const usedIn = new Map<string, string>()
-  for (const [roundId, pid] of d.myPicks) if (roundId !== round?.id) usedIn.set(pid, roundId)
+  for (const [rid, pid] of d.myPicks) if (rid !== round?.id) usedIn.set(pid, rid)
   const reason = (p: Player) => {
     const lost = d.lostRound.get(p.id)
     if (lost) return `Éliminé · ${roundName(lost)}`
     const used = usedIn.get(p.id)
-    if (used) return `Déjà choisi · ${data.rounds.find((r) => r.id === used)?.name ?? ""}`
+    if (used) {
+      const r = data.rounds.find((x) => x.id === used)
+      return `${r && !d.locked(r) ? "Prévu" : "Déjà choisi"} · ${r?.name ?? ""}`
+    }
     return null
   }
   const needle = q.trim().toLowerCase()
@@ -366,19 +383,27 @@ function MyPick({ data, d, onChanged }: { data: Data; d: Derived; onChanged: () 
     .map((p) => ({ p, why: reason(p) }))
     .sort((a, b) => Number(!!a.why) - Number(!!b.why) || (a.p.seed ?? 999) - (b.p.seed ?? 999) || a.p.name.localeCompare(b.p.name))
 
-  async function pick(p: Player) {
-    if (!round) return
-    setSaving(p.id)
+  async function save(fn: "make_pick" | "clear_pick", key: string, args: Record<string, string>) {
+    setSaving(key)
     setError(null)
-    const { error } = await supabase.rpc("make_pick", { p_round_id: round.id, p_player_id: p.id })
+    const { error } = await supabase.rpc(fn, args)
     if (error) setError(error.message)
     else await onChanged()
     setSaving(null)
   }
+  const pick = (p: Player) => round && save("make_pick", p.id, { p_round_id: round.id, p_player_id: p.id })
+  const clear = () => round && save("clear_pick", "clear", { p_round_id: round.id })
 
   return (
     <div className="space-y-6">
-      {alive && round && <LockBlock round={round} />}
+      {alive && round && <LockBlock round={round} planned={!isCurrent} />}
+
+      {alive && stale.length > 0 && (
+        <div role="alert" className="border-l-4 border-ball bg-ink/70 px-4 py-3 text-sm font-medium">
+          {stale.map((r) => r.name).join(", ")} : ton joueur prévu est éliminé. Change-le avant le verrouillage, sinon tu
+          es éliminé.
+        </div>
+      )}
 
       {statusRound && statusPid && (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-l-4 border-chalk bg-brick/40 px-4 py-3 text-sm">
@@ -392,11 +417,28 @@ function MyPick({ data, d, onChanged }: { data: Data; d: Derived; onChanged: () 
 
       {trail.length > 0 && (
         <section>
-          <h2 className="micro-label mb-2">Mon parcours</h2>
+          <div className="mb-2 flex items-end justify-between gap-3">
+            <h2 className="micro-label">Mon parcours</h2>
+            {alive && openRounds.length > 1 && <span className="text-xs text-chalk/80">Touche un tour pour le préparer</span>}
+          </div>
           <div className="flex flex-wrap gap-1.5">
-            {trail.map((s) => (
-              <Chip key={s.round.id} step={s} withPlayer />
-            ))}
+            {trail.map((s) =>
+              alive && openRounds.includes(s.round) ? (
+                <button
+                  key={s.round.id}
+                  onClick={() => setRoundId(s.round.id)}
+                  aria-pressed={s.round.id === round?.id}
+                  className={cn(
+                    "rounded-[3px] outline-offset-2",
+                    s.round.id === round?.id ? "outline-2 outline-ball" : "hover:opacity-85",
+                  )}
+                >
+                  <Chip step={s} withPlayer />
+                </button>
+              ) : (
+                <Chip key={s.round.id} step={s} withPlayer />
+              ),
+            )}
           </div>
         </section>
       )}
@@ -412,17 +454,33 @@ function MyPick({ data, d, onChanged }: { data: Data; d: Derived; onChanged: () 
         <Empty>Aucun tour ouvert pour le moment.</Empty>
       ) : (
         <>
-          {!pickedId && (
-            <div role="status" className="border-l-4 border-ball bg-ink/70 px-4 py-3 text-sm font-medium">
-              Pas encore de choix pour ce tour. Sans choix au verrouillage, tu es éliminé.
-            </div>
-          )}
+          {!pickedId &&
+            (isCurrent ? (
+              <div role="status" className="border-l-4 border-ball bg-ink/70 px-4 py-3 text-sm font-medium">
+                Pas encore de choix pour ce tour. Sans choix au verrouillage, tu es éliminé.
+              </div>
+            ) : (
+              <div role="status" className="border-l-4 border-chalk bg-brick/40 px-4 py-3 text-sm">
+                Tu peux préparer ce tour dès maintenant ou attendre : ton choix reste modifiable jusqu'à son
+                verrouillage.
+              </div>
+            ))}
           {error && <ErrorBox message={error} />}
 
           <section>
             <div className="mb-3 flex items-end justify-between gap-3">
-              <h2 className="micro-label">Joueurs du tableau</h2>
-              <span className="text-xs text-chalk/80">Modifiable jusqu'au verrouillage</span>
+              <h2 className="micro-label">Joueurs du tableau · {round.name}</h2>
+              {pickedId ? (
+                <button
+                  onClick={clear}
+                  disabled={!!saving}
+                  className="min-h-11 text-xs font-medium text-chalk/90 underline underline-offset-2 hover:text-chalk"
+                >
+                  {saving === "clear" ? "…" : "Retirer mon choix"}
+                </button>
+              ) : (
+                <span className="text-xs text-chalk/80">Modifiable jusqu'au verrouillage</span>
+              )}
             </div>
             <SearchInput value={q} onChange={setQ} placeholder="Chercher un joueur" />
             <ul className="mt-3 border-2 border-chalk/90">
@@ -471,16 +529,20 @@ function MyPick({ data, d, onChanged }: { data: Data; d: Derived; onChanged: () 
   )
 }
 
-/** Big lock countdown: minutes when far, live seconds under 1 h, plus the local lock time. */
-function LockBlock({ round }: { round: Round }) {
+/** Big lock countdown: minutes when far, live seconds under 1 h, plus the local lock time. A later round's lock
+ *  follows the order of play, so it is only an estimate until then. */
+function LockBlock({ round, planned = false }: { round: Round; planned?: boolean }) {
   const now = useNow(1000)
   return (
     <Box className="scoreboard px-4 py-4">
-      <span className="micro-label">{round.name} · verrouillage dans</span>
+      <span className="micro-label">{round.name} · verrouillage {planned ? "prévu " : ""}dans</span>
       <p className="scoreboard-digits mt-1 font-num text-4xl leading-tight tabular-nums">
         {formatLeft(new Date(round.locks_at).getTime() - now)}
       </p>
-      <p className="mt-1 text-sm text-chalk/85">Heure locale : {formatDate(round.locks_at, true)}</p>
+      <p className="mt-1 text-sm text-chalk/85">
+        Heure locale : {formatDate(round.locks_at, true)}
+        {planned && " · suit le programme, peut avancer"}
+      </p>
     </Box>
   )
 }
@@ -580,7 +642,7 @@ function Leaderboard({ data, d, uid }: { data: Data; d: Derived; uid?: string })
         ]}
       />
 
-      {view === "dist" && <Distribution data={data} d={d} rounds={lockedRounds} />}
+      {view === "dist" && <Distribution d={d} rounds={lockedRounds} />}
 
       {view === "stats" && <Stats data={data} d={d} rounds={lockedRounds} myRank={myRank} total={total} />}
 
@@ -776,14 +838,14 @@ function Grid({
 }
 
 /** Per locked round: how many entries picked each player. */
-function Distribution({ data, d, rounds }: { data: Data; d: Derived; rounds: Round[] }) {
+function Distribution({ d, rounds }: { d: Derived; rounds: Round[] }) {
   if (rounds.length === 0) return <Empty>La répartition apparaît quand le premier tour est verrouillé.</Empty>
 
   return (
     <div className="space-y-4">
       {[...rounds].reverse().map((r) => {
         const counts = new Map<string, number>()
-        for (const p of data.picks) if (p.round_id === r.id) counts.set(p.player_id, (counts.get(p.player_id) ?? 0) + 1)
+        for (const p of d.livePicks) if (p.round_id === r.id) counts.set(p.player_id, (counts.get(p.player_id) ?? 0) + 1)
         const total = [...counts.values()].reduce((a, b) => a + b, 0)
         const list = [...counts]
           .map(([pid, n]) => ({ p: d.playerById.get(pid), pid, n, lost: d.pickResult(pid, r) === "lost" }))
@@ -850,7 +912,7 @@ function Stats({
   // Every (round, player) that was picked, with who picked him and his result.
   const picked = rounds.flatMap((r) => {
     const byPlayer = new Map<string, string[]>()
-    for (const p of data.picks) if (p.round_id === r.id) byPlayer.set(p.player_id, [...(byPlayer.get(p.player_id) ?? []), p.entry_id])
+    for (const p of d.livePicks) if (p.round_id === r.id) byPlayer.set(p.player_id, [...(byPlayer.get(p.player_id) ?? []), p.entry_id])
     return [...byPlayer].map(([pid, entries]) => ({ r, pid, entries, res: d.pickResult(pid, r) ?? null }))
   })
   const bold = picked
