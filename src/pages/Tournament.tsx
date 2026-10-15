@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react"
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom"
-import { ArrowLeft, Search } from "lucide-react"
+import { ArrowLeft, Check, ChevronRight, Search } from "lucide-react"
 
 import { AppShell, Box, ChalkButton, ErrorBox, LineButton, Loading, PageTitle, ResultTag, Tag } from "@/components/court/AppShell"
 import { Bracket } from "@/components/court/Bracket"
@@ -386,6 +386,7 @@ const openRoundsOf = (data: Data, d: Derived) =>
 
 function MyPick({ data, d, onChanged, onPlan }: { data: Data; d: Derived; onChanged: () => Promise<void>; onPlan: () => void }) {
   const [roundId, setRoundId] = useState<string | null>(null)
+  const [view, setView] = useState<"list" | "tree">("list")
   const gridRef = useRef<HTMLElement>(null)
   const status = data.t.status
   const openRounds = openRoundsOf(data, d)
@@ -480,9 +481,21 @@ function MyPick({ data, d, onChanged, onPlan }: { data: Data; d: Derived; onChan
             </ChalkButton>
           )}
 
-          <section ref={gridRef} className="scroll-mt-4">
-            <h2 className="micro-label mb-2">Mes choix à venir</h2>
+          <section ref={gridRef} className="scroll-mt-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="micro-label">Mes choix à venir</h2>
+              <Segmented
+                label="Affichage de mes choix"
+                value={view}
+                onChange={setView}
+                options={[
+                  ["list", "Liste"],
+                  ["tree", "Tableau"],
+                ]}
+              />
+            </div>
             <RoundGrid rounds={openRounds} d={d} selected={round.id} onSelect={setRoundId} />
+            {view === "tree" && <MyBracket data={data} d={d} round={round} boxClassName="max-h-[70svh]" />}
           </section>
 
           {!pickedId &&
@@ -669,28 +682,10 @@ function PlayerPicker({
 function Planner({ data, d, onChanged, onClose }: { data: Data; d: Derived; onChanged: () => Promise<void>; onClose: () => void }) {
   const openRounds = openRoundsOf(data, d)
   const [roundId, setRoundId] = useState(() => (openRounds.find((r) => !d.myPicks.has(r.id)) ?? openRounds[0])?.id)
-  const [from, setFrom] = useState(0)
-  const drawRef = useRef<HTMLDivElement>(null)
   const step = Math.max(0, openRounds.findIndex((r) => r.id === roundId))
   const round = openRounds[step]
   const pickedId = round ? d.myPicks.get(round.id) : undefined
   const filled = openRounds.filter((r) => d.myPicks.has(r.id)).length
-
-  // Keep my pick of the current step in view in the draw: centred vertically, scrolled sideways only if hidden.
-  const slotKey = round && pickedId ? [...d.myPath].find(([k, pid]) => pid === pickedId && k.startsWith(`${round.id}:`))?.[0] : undefined
-  useEffect(() => {
-    const box = drawRef.current
-    const el = slotKey ? box?.querySelector<HTMLElement>(`[data-slot="${slotKey}"]`) : null
-    if (!box || !el) return
-    const b = box.getBoundingClientRect()
-    const e = el.getBoundingClientRect()
-    const left = e.left < b.left ? e.left - b.left : e.right > b.right ? e.right - b.right : 0
-    box.scrollTo({
-      top: box.scrollTop + e.top - b.top - (b.height - e.height) / 2,
-      left: box.scrollLeft + left,
-      behavior: "smooth",
-    })
-  }, [slotKey, from])
 
   const go = (i: number) => {
     setRoundId(openRounds[i].id)
@@ -771,41 +766,72 @@ function Planner({ data, d, onChanged, onClose }: { data: Data; d: Derived; onCh
       </div>
 
       {/* Desktop: the whole draw with my path, next to the steps. */}
-      <aside className="hidden space-y-3 lg:sticky lg:top-4 lg:block">
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="micro-label">Mon tableau</h2>
-          <span className="text-xs text-chalk/80">
-            <span className="mr-1.5 inline-block h-3 w-1 bg-ball align-middle" />
-            mes choix · <i>prévu</i>
-          </span>
-        </div>
-        {data.matches.length === 0 ? (
-          <Empty>Les matchs ne sont pas encore publiés.</Empty>
-        ) : (
-          <>
-            <div role="group" aria-label="Afficher à partir du tour" className="flex flex-wrap items-center gap-1.5">
-              <span className="micro-label mr-1">Depuis</span>
-              {data.rounds.slice(0, -1).map((r, i) => (
-                <ChipButton key={r.id} on={i === from} onClick={() => setFrom(i)}>
-                  {r.name}
-                </ChipButton>
-              ))}
-            </div>
-            <div ref={drawRef} className="max-h-[calc(100svh-8rem)] overflow-auto overscroll-contain border-2 border-chalk/90">
-              <Bracket
-                key={from}
-                rounds={data.rounds.slice(from)}
-                matches={data.matches}
-                playerById={d.playerById}
-                drawSize={Math.max(2, data.t.draw_size / 2 ** from)}
-                pickByRound={d.myPicks}
-                projected={d.myPath}
-                className="overflow-visible border-0"
-              />
-            </div>
-          </>
-        )}
+      <aside className="hidden lg:sticky lg:top-4 lg:block">
+        <MyBracket data={data} d={d} round={round} boxClassName="max-h-[calc(100svh-11rem)]" />
       </aside>
+    </div>
+  )
+}
+
+/**
+ * My path in the draw: every pick drawn as winning its slots up to its round, the opponents it beats struck through.
+ * Keeps the given round's pick in view: centred vertically, scrolled sideways only if hidden.
+ */
+function MyBracket({ data, d, round, boxClassName }: { data: Data; d: Derived; round?: Round | null; boxClassName?: string }) {
+  const [from, setFrom] = useState(0)
+  const drawRef = useRef<HTMLDivElement>(null)
+  const pickedId = round ? d.myPicks.get(round.id) : undefined
+  const slotKey = round && pickedId ? [...d.myPath].find(([k, pid]) => pid === pickedId && k.startsWith(`${round.id}:`))?.[0] : undefined
+  useEffect(() => {
+    const box = drawRef.current
+    const el = slotKey ? box?.querySelector<HTMLElement>(`[data-slot="${slotKey}"]`) : null
+    if (!box || !el) return
+    const b = box.getBoundingClientRect()
+    const e = el.getBoundingClientRect()
+    const left = e.left < b.left ? e.left - b.left : e.right > b.right ? e.right - b.right : 0
+    box.scrollTo({
+      top: box.scrollTop + e.top - b.top - (b.height - e.height) / 2,
+      left: box.scrollLeft + left,
+      behavior: "smooth",
+    })
+  }, [slotKey, from])
+
+  if (data.matches.length === 0) return <Empty>Les matchs ne sont pas encore publiés.</Empty>
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-chalk/90">
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block h-3 w-1 bg-ball" />
+          <strong>mon choix</strong>
+          <ChevronRight className="size-3.5 text-ball" aria-hidden="true" />
+          passe
+        </span>
+        <span className="text-chalk/55 line-through">perd</span>
+        <span>
+          <i>prévu</i> · <Check className="inline size-3.5 align-[-0.15em]" aria-hidden="true" /> joué
+        </span>
+      </div>
+      <div role="group" aria-label="Afficher à partir du tour" className="flex flex-wrap items-center gap-1.5">
+        <span className="micro-label mr-1">Depuis</span>
+        {data.rounds.slice(0, -1).map((r, i) => (
+          <ChipButton key={r.id} on={i === from} onClick={() => setFrom(i)}>
+            {r.name}
+          </ChipButton>
+        ))}
+      </div>
+      <div ref={drawRef} className={cn("overflow-auto overscroll-contain border-2 border-chalk/90", boxClassName)}>
+        <Bracket
+          key={from}
+          rounds={data.rounds.slice(from)}
+          before={data.rounds[from - 1]}
+          matches={data.matches}
+          playerById={d.playerById}
+          drawSize={Math.max(2, data.t.draw_size / 2 ** from)}
+          pickByRound={d.myPicks}
+          projected={d.myPath}
+          className="overflow-visible border-0"
+        />
+      </div>
     </div>
   )
 }
@@ -1336,6 +1362,7 @@ function Draw({ data, d }: { data: Data; d: Derived }) {
             <Bracket
               key={from}
               rounds={data.rounds.slice(from)}
+              before={data.rounds[from - 1]}
               matches={data.matches}
               playerById={d.playerById}
               drawSize={Math.max(2, data.t.draw_size / 2 ** from)}
