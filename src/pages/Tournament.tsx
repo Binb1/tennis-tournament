@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react"
-import { Link, useParams } from "react-router-dom"
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { ArrowLeft, Search } from "lucide-react"
 
-import { AppShell, Box, ChalkButton, ErrorBox, Loading, PageTitle, ResultTag, Tag } from "@/components/court/AppShell"
+import { AppShell, Box, ChalkButton, ErrorBox, LineButton, Loading, PageTitle, ResultTag, Tag } from "@/components/court/AppShell"
 import { Bracket } from "@/components/court/Bracket"
 import { Flag, MatchLine, PlayerName } from "@/components/court/PlayerLabel"
 import { SocialIcons } from "@/components/court/Socials"
@@ -87,6 +87,11 @@ function TournamentView({ id }: { id: string }) {
   const [now, setNow] = useState(() => Date.now())
   const [joinError, setJoinError] = useState<string | null>(null)
   const [joining, setJoining] = useState(false)
+  // "Remplir tous les tours" lives in the URL, so the phone's back button closes it.
+  const [params, setParams] = useSearchParams()
+  const planning = params.get("remplir") === "1"
+  const navigate = useNavigate()
+  const location = useLocation()
 
   const reload = useCallback(() => {
     setError(null)
@@ -148,6 +153,21 @@ function TournamentView({ id }: { id: string }) {
     )
   }
 
+  const openPlanner = () => {
+    setParams({ remplir: "1" })
+    window.scrollTo(0, 0)
+  }
+  // Opened from the tab: go back to it. Landed straight on the planner URL: drop the param.
+  const closePlanner = () => (location.key !== "default" ? navigate(-1) : setParams({}, { replace: true }))
+
+  if (planning && d.myEntry && (d.myStatus?.alive ?? true)) {
+    return (
+      <AppShell wide>
+        <Planner data={data} d={d} onChanged={reload} onClose={closePlanner} />
+      </AppShell>
+    )
+  }
+
   const { t } = data
   return (
     <AppShell>
@@ -174,7 +194,7 @@ function TournamentView({ id }: { id: string }) {
       <Tabs value={tab} onChange={setTab} />
       {error && <div className="mt-4"><ErrorBox message={error} onRetry={reload} /></div>}
       <div className="mt-6">
-        {tab === "pick" && <MyPick data={data} d={d} onChanged={reload} />}
+        {tab === "pick" && <MyPick data={data} d={d} onChanged={reload} onPlan={openPlanner} />}
         {tab === "board" && <Leaderboard data={data} d={d} uid={uid} />}
         {tab === "draw" && <Draw data={data} d={d} />}
       </div>
@@ -273,7 +293,19 @@ function derive(data: Data, uid: string | undefined, now: number) {
     return null
   }
 
-  return { result, playerById, picksByEntry, livePicks, meetRound, roundByIdx, statusByEntry, lostRound, pickResult, currentRound, locked, noPick, trail, myEntry, myStatus, myPicks, matchOf }
+  /** My path in the bracket: a player picked for round k wins each of his slots up to k. "<round id>:<pos>" -> player. */
+  const myPath = new Map<string, string>()
+  for (const [rid, pid] of myPicks) {
+    const sp = slotOf.get(pid)
+    const k = idxOf.get(rid)
+    if (!sp || !k) continue
+    for (let j = sp.k; j <= k; j++) {
+      const r = roundByIdx.get(j)
+      if (r) myPath.set(`${r.id}:${Math.ceil(sp.p / 2 ** (j - sp.k))}`, pid)
+    }
+  }
+
+  return { result, playerById, picksByEntry, livePicks, meetRound, myPath, roundByIdx, statusByEntry, lostRound, pickResult, currentRound, locked, noPick, trail, myEntry, myStatus, myPicks, matchOf }
 }
 type Derived = ReturnType<typeof derive>
 
@@ -348,15 +380,15 @@ function Chip({ step, withPlayer = false }: { step: TrailStep; withPlayer?: bool
 /* ------------------------------------------------------------------ */
 /* Mon choix                                                           */
 
-function MyPick({ data, d, onChanged }: { data: Data; d: Derived; onChanged: () => Promise<void> }) {
-  const [saving, setSaving] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [q, setQ] = useState("")
+/** Rounds still open, when picks are: registration and live, every round not locked yet. */
+const openRoundsOf = (data: Data, d: Derived) =>
+  data.t.status === "live" || data.t.status === "registration" ? data.rounds.filter((r) => !d.locked(r)) : []
+
+function MyPick({ data, d, onChanged, onPlan }: { data: Data; d: Derived; onChanged: () => Promise<void>; onPlan: () => void }) {
   const [roundId, setRoundId] = useState<string | null>(null)
-  const plannerRef = useRef<HTMLElement>(null)
-  // Picks are open during registration and live, for every round not locked yet (queued picks).
+  const gridRef = useRef<HTMLElement>(null)
   const status = data.t.status
-  const openRounds = status === "live" || status === "registration" ? data.rounds.filter((r) => !d.locked(r)) : []
+  const openRounds = openRoundsOf(data, d)
   // The chosen round, or the current one (also when the chosen round just locked).
   const round = openRounds.find((r) => r.id === roundId) ?? openRounds[0] ?? null
 
@@ -370,11 +402,12 @@ function MyPick({ data, d, onChanged }: { data: Data; d: Derived; onChanged: () 
     )
   }
 
-  // History (locked rounds); the open rounds are in the planner below.
+  // History (locked rounds); the open rounds are in the grid below.
   const trail = d.trail(d.myEntry.id).filter((s) => d.locked(s.round))
   const alive = d.myStatus?.alive ?? true
   const pickedId = round ? d.myPicks.get(round.id) : undefined
   const isCurrent = !!round && round.id === d.currentRound?.id
+  const filled = openRounds.filter((r) => d.myPicks.has(r.id)).length
   // Status line: the last locked round, whose result is the one to wait for.
   const lockedRounds = data.rounds.filter(d.locked)
   const statusRound = status === "live" ? lockedRounds[lockedRounds.length - 1] : undefined
@@ -386,48 +419,14 @@ function MyPick({ data, d, onChanged }: { data: Data; d: Derived; onChanged: () 
     return pid && d.lostRound.has(pid)
   })
 
-  // My picks in the other rounds of my path.
-  const others = data.rounds.flatMap((r) => {
-    const pid = r.id === round?.id ? undefined : d.myPicks.get(r.id)
-    return pid ? [{ r, pid }] : []
-  })
-  // Why a player can't be picked, or null if he can.
-  const reason = (p: Player) => {
-    const lost = d.lostRound.get(p.id)
-    if (lost) return `Éliminé · ${roundName(lost)}`
-    const used = others.find((o) => o.pid === p.id)
-    if (used) return `${d.locked(used.r) ? "Déjà choisi" : "Prévu"} · ${used.r.name}`
-    // Both must win up to the round they meet in: one of the two picks is a sure loss.
-    const clash = round && others.find((o) => (d.meetRound(p.id, o.pid) ?? Infinity) <= Math.min(round.idx, o.r.idx))
-    if (clash) return `Croise ${shortName(d.playerById.get(clash.pid)?.name ?? "")} · ${clash.r.name}`
-    return null
+  // Filling the path from here: after a first pick, go on to the next open round still without one.
+  function picked(hadPick: boolean) {
+    if (!round || hadPick) return
+    const next = openRounds.find((r) => r.idx > round.idx && !d.myPicks.has(r.id))
+    if (!next) return
+    setRoundId(next.id)
+    gridRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
   }
-  const needle = q.trim().toLowerCase()
-  const list = data.players
-    .filter((p) => !needle || p.name.toLowerCase().includes(needle))
-    .map((p) => ({ p, why: reason(p) }))
-    .sort((a, b) => Number(!!a.why) - Number(!!b.why) || (a.p.seed ?? 999) - (b.p.seed ?? 999) || a.p.name.localeCompare(b.p.name))
-
-  async function save(fn: "make_pick" | "clear_pick", key: string, args: Record<string, string>) {
-    setSaving(key)
-    setError(null)
-    const { error } = await supabase.rpc(fn, args)
-    if (error) setError(error.message)
-    else await onChanged()
-    setSaving(null)
-    return !error
-  }
-  async function pick(p: Player) {
-    if (!round) return
-    // Filling the path: after a first pick, go on to the next open round still without one.
-    const next = pickedId ? undefined : openRounds.find((r) => r.idx > round.idx && !d.myPicks.has(r.id))
-    if ((await save("make_pick", p.id, { p_round_id: round.id, p_player_id: p.id })) && next) {
-      setRoundId(next.id)
-      setQ("")
-      plannerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-    }
-  }
-  const clear = () => round && save("clear_pick", "clear", { p_round_id: round.id })
 
   return (
     <div className="space-y-6">
@@ -472,35 +471,18 @@ function MyPick({ data, d, onChanged }: { data: Data; d: Derived; onChanged: () 
         <Empty>Aucun tour ouvert pour le moment.</Empty>
       ) : (
         <>
-          <section ref={plannerRef} className="scroll-mt-4">
-            <div className="mb-2 flex items-end justify-between gap-3">
-              <h2 className="micro-label">Mes choix à venir</h2>
-              {openRounds.length > 1 && <span className="text-xs text-chalk/80">Prépare tous les tours dès maintenant</span>}
-            </div>
-            <div className="grid grid-cols-3 gap-1.5 min-[520px]:grid-cols-4">
-              {openRounds.map((r) => {
-                const pid = d.myPicks.get(r.id)
-                const on = r.id === round.id
-                const out = !!pid && d.lostRound.has(pid)
-                return (
-                  <button
-                    key={r.id}
-                    onClick={() => setRoundId(r.id)}
-                    aria-pressed={on}
-                    className={cn(
-                      "min-h-12 min-w-0 rounded-[2px] border-2 px-2 py-1 text-left",
-                      on ? "border-chalk bg-chalk text-ink" : pid ? "border-chalk/80 hover:bg-chalk/10" : "border-dashed border-chalk/60 hover:bg-chalk/10",
-                      out && !on && "border-ball",
-                    )}
-                  >
-                    <span className="block truncate text-[11px] font-bold tracking-[0.08em] uppercase [font-stretch:85%]">{r.name}</span>
-                    <span className={cn("block truncate text-xs", !pid && "opacity-70", out && "line-through")}>
-                      {pid ? shortName(d.playerById.get(pid)?.name ?? "") : "à choisir"}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
+          {openRounds.length > 1 && (
+            <ChalkButton onClick={onPlan} className="w-full">
+              Remplir tous les tours
+              <span className="ml-2 tabular-nums opacity-75">
+                {filled}/{openRounds.length}
+              </span>
+            </ChalkButton>
+          )}
+
+          <section ref={gridRef} className="scroll-mt-4">
+            <h2 className="micro-label mb-2">Mes choix à venir</h2>
+            <RoundGrid rounds={openRounds} d={d} selected={round.id} onSelect={setRoundId} />
           </section>
 
           {!pickedId &&
@@ -514,66 +496,316 @@ function MyPick({ data, d, onChanged }: { data: Data; d: Derived; onChanged: () 
                 verrouillage.
               </div>
             ))}
-          {error && <ErrorBox message={error} />}
 
-          <section>
-            <div className="mb-3 flex items-end justify-between gap-3">
-              <h2 className="micro-label">Joueurs du tableau · {round.name}</h2>
-              {pickedId ? (
-                <button
-                  onClick={clear}
-                  disabled={!!saving}
-                  className="min-h-11 text-xs font-medium text-chalk/90 underline underline-offset-2 hover:text-chalk"
-                >
-                  {saving === "clear" ? "…" : "Retirer mon choix"}
-                </button>
-              ) : (
-                <span className="text-xs text-chalk/80">Modifiable jusqu'au verrouillage</span>
-              )}
-            </div>
-            <SearchInput value={q} onChange={setQ} placeholder="Chercher un joueur" />
-            <ul className="mt-3 border-2 border-chalk/90">
-              {list.map(({ p, why }) => {
-                const selected = p.id === pickedId
-                return (
-                  <li key={p.id} className="border-t-2 border-chalk/50 first:border-t-0">
-                    <button
-                      disabled={!!why || !!saving}
-                      onClick={() => pick(p)}
-                      aria-pressed={selected}
-                      className={cn(
-                        "flex min-h-12 w-full items-center gap-3 px-3 py-2.5 text-left transition-colors",
-                        selected ? "bg-chalk text-clay" : "hover:bg-chalk/10",
-                        why && "cursor-not-allowed opacity-55",
-                      )}
-                    >
-                      <span className={cn("w-7 shrink-0 text-xs font-bold tabular-nums", !selected && "opacity-70")}>
-                        {p.seed ? `[${p.seed}]` : ""}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <PlayerName
-                          p={p}
-                          className={cn(selected ? "font-bold" : "font-medium", why && "line-through decoration-1")}
-                        />
-                        {!why && <MatchLine m={d.matchOf.get(`${round.id}:${p.id}`)} pid={p.id} playerById={d.playerById} />}
-                      </span>
-                      {why && <span className="shrink-0 text-xs">{why}</span>}
-                      {selected && (
-                        // Inverted tag on the chalk row: surface colour fill, chalk text.
-                        <span className="shrink-0 rounded-[2px] bg-clay px-2 py-0.5 text-[11px] font-bold tracking-[0.12em] whitespace-nowrap text-chalk uppercase [font-stretch:85%]">
-                          Mon choix
-                        </span>
-                      )}
-                      {saving === p.id && <span className="shrink-0 text-xs">…</span>}
-                    </button>
-                  </li>
-                )
-              })}
-              {list.length === 0 && <li className="px-3 py-4 text-sm text-chalk/80">Aucun joueur.</li>}
-            </ul>
-          </section>
+          <PlayerPicker key={round.id} data={data} d={d} round={round} onChanged={onChanged} onPicked={picked} />
         </>
       )}
+    </div>
+  )
+}
+
+/** One button per open round: its pick, or "à choisir". */
+function RoundGrid({
+  rounds,
+  d,
+  selected,
+  onSelect,
+}: {
+  rounds: Round[]
+  d: Derived
+  selected: string
+  onSelect: (id: string) => void
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-1.5 min-[520px]:grid-cols-4">
+      {rounds.map((r) => {
+        const pid = d.myPicks.get(r.id)
+        const on = r.id === selected
+        const out = !!pid && d.lostRound.has(pid)
+        return (
+          <button
+            key={r.id}
+            onClick={() => onSelect(r.id)}
+            aria-pressed={on}
+            className={cn(
+              "min-h-12 min-w-0 rounded-[2px] border-2 px-2 py-1 text-left",
+              on ? "border-chalk bg-chalk text-ink" : pid ? "border-chalk/80 hover:bg-chalk/10" : "border-dashed border-chalk/60 hover:bg-chalk/10",
+              out && !on && "border-ball",
+            )}
+          >
+            <span className="block truncate text-[11px] font-bold tracking-[0.08em] uppercase [font-stretch:85%]">{r.name}</span>
+            <span className={cn("block truncate text-xs", !pid && "opacity-70", out && "line-through")}>
+              {pid ? shortName(d.playerById.get(pid)?.name ?? "") : "à choisir"}
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/** Search + the draw for one open round. Tap a player to pick him (saved right away). */
+function PlayerPicker({
+  data,
+  d,
+  round,
+  onChanged,
+  onPicked,
+}: {
+  data: Data
+  d: Derived
+  round: Round
+  onChanged: () => Promise<void>
+  /** After a successful pick; `hadPick`: the round had a pick before (a change, not a first pick). */
+  onPicked?: (hadPick: boolean) => void
+}) {
+  const [saving, setSaving] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [q, setQ] = useState("")
+  const pickedId = d.myPicks.get(round.id)
+  const roundName = (idx: number) => d.roundByIdx.get(idx)?.name ?? `tour ${idx}`
+
+  // My picks in the other rounds of my path.
+  const others = data.rounds.flatMap((r) => {
+    const pid = r.id === round.id ? undefined : d.myPicks.get(r.id)
+    return pid ? [{ r, pid }] : []
+  })
+  // Why a player can't be picked, or null if he can.
+  const reason = (p: Player) => {
+    const lost = d.lostRound.get(p.id)
+    if (lost) return `Éliminé · ${roundName(lost)}`
+    const used = others.find((o) => o.pid === p.id)
+    if (used) return `${d.locked(used.r) ? "Déjà choisi" : "Prévu"} · ${used.r.name}`
+    // Both must win up to the round they meet in: one of the two picks is a sure loss.
+    const clash = others.find((o) => (d.meetRound(p.id, o.pid) ?? Infinity) <= Math.min(round.idx, o.r.idx))
+    if (clash) return `Croise ${shortName(d.playerById.get(clash.pid)?.name ?? "")} · ${clash.r.name}`
+    return null
+  }
+  const needle = q.trim().toLowerCase()
+  const list = data.players
+    .filter((p) => !needle || p.name.toLowerCase().includes(needle))
+    .map((p) => ({ p, why: reason(p) }))
+    .sort((a, b) => Number(!!a.why) - Number(!!b.why) || (a.p.seed ?? 999) - (b.p.seed ?? 999) || a.p.name.localeCompare(b.p.name))
+
+  async function save(fn: "make_pick" | "clear_pick", key: string, args: Record<string, string>) {
+    setSaving(key)
+    setError(null)
+    const { error } = await supabase.rpc(fn, args)
+    if (error) setError(error.message)
+    else await onChanged()
+    setSaving(null)
+    return !error
+  }
+  async function pick(p: Player) {
+    const hadPick = !!pickedId
+    if (await save("make_pick", p.id, { p_round_id: round.id, p_player_id: p.id })) onPicked?.(hadPick)
+  }
+
+  return (
+    <section className="space-y-3">
+      {error && <ErrorBox message={error} />}
+      <div className="flex items-end justify-between gap-3">
+        <h2 className="micro-label">Joueurs du tableau · {round.name}</h2>
+        {pickedId ? (
+          <button
+            onClick={() => save("clear_pick", "clear", { p_round_id: round.id })}
+            disabled={!!saving}
+            className="min-h-11 text-xs font-medium text-chalk/90 underline underline-offset-2 hover:text-chalk"
+          >
+            {saving === "clear" ? "…" : "Retirer mon choix"}
+          </button>
+        ) : (
+          <span className="text-xs text-chalk/80">Modifiable jusqu'au verrouillage</span>
+        )}
+      </div>
+      <SearchInput value={q} onChange={setQ} placeholder="Chercher un joueur" />
+      <ul className="border-2 border-chalk/90">
+        {list.map(({ p, why }) => {
+          const selected = p.id === pickedId
+          return (
+            <li key={p.id} className="border-t-2 border-chalk/50 first:border-t-0">
+              <button
+                disabled={!!why || !!saving}
+                onClick={() => pick(p)}
+                aria-pressed={selected}
+                className={cn(
+                  "flex min-h-12 w-full items-center gap-3 px-3 py-2.5 text-left transition-colors",
+                  selected ? "bg-chalk text-clay" : "hover:bg-chalk/10",
+                  why && "cursor-not-allowed opacity-55",
+                )}
+              >
+                <span className={cn("w-7 shrink-0 text-xs font-bold tabular-nums", !selected && "opacity-70")}>
+                  {p.seed ? `[${p.seed}]` : ""}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <PlayerName
+                    p={p}
+                    className={cn(selected ? "font-bold" : "font-medium", why && "line-through decoration-1")}
+                  />
+                  {!why && <MatchLine m={d.matchOf.get(`${round.id}:${p.id}`)} pid={p.id} playerById={d.playerById} />}
+                </span>
+                {why && <span className="shrink-0 text-xs">{why}</span>}
+                {selected && (
+                  // Inverted tag on the chalk row: surface colour fill, chalk text.
+                  <span className="shrink-0 rounded-[2px] bg-clay px-2 py-0.5 text-[11px] font-bold tracking-[0.12em] whitespace-nowrap text-chalk uppercase [font-stretch:85%]">
+                    Mon choix
+                  </span>
+                )}
+                {saving === p.id && <span className="shrink-0 text-xs">…</span>}
+              </button>
+            </li>
+          )
+        })}
+        {list.length === 0 && <li className="px-3 py-4 text-sm text-chalk/80">Aucun joueur.</li>}
+      </ul>
+    </section>
+  )
+}
+
+/**
+ * "Remplir tous les tours": one round per step (pick, then Suivant), the rounds already filled excluded from the next
+ * steps. On desktop the draw sits next to it, filled with my path as I pick.
+ */
+function Planner({ data, d, onChanged, onClose }: { data: Data; d: Derived; onChanged: () => Promise<void>; onClose: () => void }) {
+  const openRounds = openRoundsOf(data, d)
+  const [roundId, setRoundId] = useState(() => (openRounds.find((r) => !d.myPicks.has(r.id)) ?? openRounds[0])?.id)
+  const [from, setFrom] = useState(0)
+  const drawRef = useRef<HTMLDivElement>(null)
+  const step = Math.max(0, openRounds.findIndex((r) => r.id === roundId))
+  const round = openRounds[step]
+  const pickedId = round ? d.myPicks.get(round.id) : undefined
+  const filled = openRounds.filter((r) => d.myPicks.has(r.id)).length
+
+  // Keep my pick of the current step in view in the draw: centred vertically, scrolled sideways only if hidden.
+  const slotKey = round && pickedId ? [...d.myPath].find(([k, pid]) => pid === pickedId && k.startsWith(`${round.id}:`))?.[0] : undefined
+  useEffect(() => {
+    const box = drawRef.current
+    const el = slotKey ? box?.querySelector<HTMLElement>(`[data-slot="${slotKey}"]`) : null
+    if (!box || !el) return
+    const b = box.getBoundingClientRect()
+    const e = el.getBoundingClientRect()
+    const left = e.left < b.left ? e.left - b.left : e.right > b.right ? e.right - b.right : 0
+    box.scrollTo({
+      top: box.scrollTop + e.top - b.top - (b.height - e.height) / 2,
+      left: box.scrollLeft + left,
+      behavior: "smooth",
+    })
+  }, [slotKey, from])
+
+  const go = (i: number) => {
+    setRoundId(openRounds[i].id)
+    window.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
+  return (
+    <div className="lg:grid lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)] lg:items-start lg:gap-8">
+      <div className="space-y-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <span className="micro-label">{data.t.name}</span>
+            <h1 className="font-display text-3xl leading-tight">Remplir mes tours</h1>
+          </div>
+          <LineButton onClick={onClose} className="shrink-0">
+            Fermer
+          </LineButton>
+        </div>
+
+        {!round ? (
+          <Empty>Aucun tour ouvert pour le moment.</Empty>
+        ) : (
+          <>
+            <div>
+              <div className="flex items-baseline justify-between text-xs font-bold [font-stretch:85%]">
+                <span className="tracking-[0.08em] uppercase">
+                  Tour {step + 1} / {openRounds.length}
+                </span>
+                <span className="tabular-nums">
+                  {filled}/{openRounds.length} {filled > 1 ? "remplis" : "rempli"}
+                </span>
+              </div>
+              <span className="mt-1.5 block h-2.5 bg-brick/50">
+                <span className="block h-full bg-chalk transition-[width]" style={{ width: `${(filled / openRounds.length) * 100}%` }} />
+              </span>
+            </div>
+
+            <RoundGrid rounds={openRounds} d={d} selected={round.id} onSelect={(id) => setRoundId(id)} />
+
+            <Box className="px-4 py-4">
+              <span className="micro-label">
+                {round.id === d.currentRound?.id ? "Verrouillage" : "Verrouillage prévu"} · {formatDate(round.locks_at, true)}
+              </span>
+              <p className="mt-1 font-display text-2xl leading-tight">{round.name}</p>
+              <p className="mt-1 text-sm text-chalk/90">
+                {pickedId ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    Mon choix : <strong className="font-bold"><PlayerName p={d.playerById.get(pickedId)} rank={false} /></strong>
+                  </span>
+                ) : (
+                  "Choisis le joueur qui gagne ce tour."
+                )}
+              </p>
+              {pickedId && d.lostRound.has(pickedId) && (
+                <p className="mt-2 border-l-4 border-ball pl-3 text-sm font-medium">Ce joueur est éliminé : change-le.</p>
+              )}
+            </Box>
+
+            <PlayerPicker key={round.id} data={data} d={d} round={round} onChanged={onChanged} />
+
+            {/* Step nav, always at hand under the long player list. */}
+            <div className="clay-surface sticky bottom-0 z-10 -mx-4 flex gap-2 border-t-2 border-chalk/90 px-4 py-3 lg:mx-0 lg:px-0">
+              <LineButton onClick={() => go(step - 1)} disabled={step === 0} className="flex-1">
+                ← Précédent
+              </LineButton>
+              {step < openRounds.length - 1 ? (
+                <ChalkButton onClick={() => go(step + 1)} className="flex-1">
+                  Suivant →
+                </ChalkButton>
+              ) : (
+                <ChalkButton onClick={onClose} className="flex-1">
+                  Terminer
+                </ChalkButton>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Desktop: the whole draw with my path, next to the steps. */}
+      <aside className="hidden space-y-3 lg:sticky lg:top-4 lg:block">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="micro-label">Mon tableau</h2>
+          <span className="text-xs text-chalk/80">
+            <span className="mr-1.5 inline-block h-3 w-1 bg-ball align-middle" />
+            mes choix · <i>prévu</i>
+          </span>
+        </div>
+        {data.matches.length === 0 ? (
+          <Empty>Les matchs ne sont pas encore publiés.</Empty>
+        ) : (
+          <>
+            <div role="group" aria-label="Afficher à partir du tour" className="flex flex-wrap items-center gap-1.5">
+              <span className="micro-label mr-1">Depuis</span>
+              {data.rounds.slice(0, -1).map((r, i) => (
+                <ChipButton key={r.id} on={i === from} onClick={() => setFrom(i)}>
+                  {r.name}
+                </ChipButton>
+              ))}
+            </div>
+            <div ref={drawRef} className="max-h-[calc(100svh-8rem)] overflow-auto overscroll-contain border-2 border-chalk/90">
+              <Bracket
+                key={from}
+                rounds={data.rounds.slice(from)}
+                matches={data.matches}
+                playerById={d.playerById}
+                drawSize={Math.max(2, data.t.draw_size / 2 ** from)}
+                pickByRound={d.myPicks}
+                projected={d.myPath}
+                className="overflow-visible border-0"
+              />
+            </div>
+          </>
+        )}
+      </aside>
     </div>
   )
 }

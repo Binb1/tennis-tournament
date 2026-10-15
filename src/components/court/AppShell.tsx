@@ -13,11 +13,12 @@ import "@/components/pixel/pixel.css"
  * Structure is drawn with chalk lines; the net separates the header from the play area.
  */
 
-export function AppShell({ children, bare = false }: { children: ReactNode; bare?: boolean }) {
+/** `wide`: desktop pages that need more than the phone column (the picks planner and its draw). */
+export function AppShell({ children, bare = false, wide = false }: { children: ReactNode; bare?: boolean; wide?: boolean }) {
   const { profile } = useAuth()
   return (
     <div className="page-surface flex min-h-svh flex-col overflow-x-clip text-chalk">
-      <SiteHeader>
+      <SiteHeader wide={wide}>
         {!bare && (
           <nav className="flex gap-3 text-sm font-medium min-[400px]:gap-4">
             <NavItem to="/tournois">Tournois</NavItem>
@@ -27,7 +28,7 @@ export function AppShell({ children, bare = false }: { children: ReactNode; bare
           </nav>
         )}
       </SiteHeader>
-      <main className="mx-auto w-full max-w-[600px] flex-1 px-4 pt-5 pb-16 md:pt-8">{children}</main>
+      <main className={cn("mx-auto w-full max-w-[600px] flex-1 px-4 pt-5 pb-16 md:pt-8", wide && "lg:max-w-[1400px]")}>{children}</main>
       <SiteFooter />
     </div>
   )
@@ -37,12 +38,12 @@ export function AppShell({ children, bare = false }: { children: ReactNode; bare
  * The backdrop wall behind the baseline: the header on every page,
  * then a thin band in the tournament colours. Wordmark stays in Shrikhand (brand).
  */
-export function SiteHeader({ children }: { children?: ReactNode }) {
+export function SiteHeader({ children, wide = false }: { children?: ReactNode; wide?: boolean }) {
   const { session } = useAuth()
   return (
     <header className="relative z-20">
       <div className="wall">
-        <div className="mx-auto flex max-w-[600px] items-center justify-between gap-2 px-4 py-1.5 md:py-4">
+        <div className={cn("mx-auto flex max-w-[600px] items-center justify-between gap-2 px-4 py-1.5 md:py-4", wide && "lg:max-w-[1400px]")}>
           <Link to={session ? "/tournois" : "/"} className="px-serve flex min-h-11 shrink-0 items-center gap-2 font-brand text-lg leading-none min-[400px]:text-xl">
             <BallMark className="px-serve-ball" />
             Tiebreakers
