@@ -1,3 +1,5 @@
+import { Check, ChevronRight } from "lucide-react"
+
 import { Flag } from "@/components/court/PlayerLabel"
 import type { Match, Player, Round } from "@/lib/supabase"
 import { cn } from "@/lib/utils"
@@ -10,7 +12,9 @@ const nextPow2 = (n: number) => 2 ** Math.ceil(Math.log2(Math.max(1, n)))
  * Slot p of round k+1 is fed by slots 2p-1 and 2p of round k; a missing match is an empty slot
  * (its players are the winners of the two feeding matches, when known).
  * `projected` fills the bracket with my picks: a player picked for round k must win every match up to k, so he is
- * drawn as the winner of those slots, and fills the empty slots after them ("prévu", in italics).
+ * drawn as the winner of those slots, and fills the empty slots after them ("prévu", in italics). His opponent there
+ * is struck through: in my path, he loses.
+ * `before`: the round just before the first column (when the bracket starts later), to fill that column's players.
  */
 export function Bracket({
   rounds,
@@ -19,6 +23,7 @@ export function Bracket({
   drawSize,
   pickByRound,
   projected,
+  before,
   className,
 }: {
   rounds: Round[]
@@ -29,6 +34,7 @@ export function Bracket({
   pickByRound: Map<string, string>
   /** Predicted winner per slot, keyed "<round id>:<position>". */
   projected?: Map<string, string>
+  before?: Round
   className?: string
 }) {
   const byRound = new Map<string, Map<number, Match>>()
@@ -53,11 +59,14 @@ export function Bracket({
       const ahead = projected?.get(`${r.id}:${p}`)
       if (m) out.push({ p1: m.player1_id, p2: m.player2_id, m, ahead })
       else {
-        // Real winner of the feeding slot, else my predicted one.
+        // Real winner of the feeding slot, else my predicted one. The first column reads them from `before`.
         const prev = slotsByCol[k - 1]
+        const feeder = (i: number) =>
+          prev ? prev[i] : before ? { m: byRound.get(before.id)?.get(i + 1), ahead: projected?.get(`${before.id}:${i + 1}`) } : undefined
         const fed = (i: number) => {
-          const real = prev?.[i]?.m?.winner_id
-          return real ? { id: real, guess: false } : prev?.[i]?.ahead ? { id: prev[i].ahead!, guess: true } : { id: null, guess: false }
+          const f = feeder(i)
+          const real = f?.m?.winner_id
+          return real ? { id: real, guess: false } : f?.ahead ? { id: f.ahead, guess: true } : { id: null, guess: false }
         }
         const [a, b] = [fed(2 * p - 2), fed(2 * p - 1)]
         out.push({ p1: a.id, p2: b.id, ahead, guess: new Set([a, b].filter((x) => x.guess).map((x) => x.id!)) })
@@ -109,16 +118,21 @@ type Slot = {
 function MatchBox({ s, playerById, pick }: { s: Slot; playerById: Map<string, Player>; pick?: string }) {
   const m = s.m
   const done = m?.status === "done" && !!m.winner_id
+  // My predicted winner, when he is in this match and it isn't played yet: he goes through, the other one is out.
+  const aheadHere = !done && !!s.ahead && (s.p1 === s.ahead || s.p2 === s.ahead)
   const row = (pid: string | null) => {
     const p = pid ? playerById.get(pid) : undefined
     const won = done && pid === m!.winner_id
     const lost = done && !!pid && !won
+    const goesOn = aheadHere && pid === s.ahead
+    const out = aheadHere && !!pid && pid !== s.ahead
     return (
       <div
         className={cn(
           "flex h-6 items-center gap-1.5 px-1.5 text-[12px]",
-          won && "font-bold",
-          lost && "text-chalk/55",
+          (won || goesOn) && "font-bold",
+          (lost || out) && "text-chalk/45",
+          out && "line-through decoration-chalk/60",
           pid && s.guess?.has(pid) && "italic",
           pid && (pid === pick || pid === s.ahead) && "bg-chalk/20 shadow-[inset_3px_0_0_var(--color-ball)]",
           lost && pid === s.ahead && "line-through",
@@ -128,7 +142,9 @@ function MatchBox({ s, playerById, pick }: { s: Slot; playerById: Map<string, Pl
           <>
             <Flag code={p.country} />
             {p.seed && <span className="shrink-0 text-[10px] tabular-nums opacity-75">[{p.seed}]</span>}
-            <span className="min-w-0 truncate">{p.name}</span>
+            <span className="min-w-0 flex-1 truncate">{p.name}</span>
+            {won && <Check aria-label="gagné" className="size-3.5 shrink-0" />}
+            {goesOn && <ChevronRight aria-label="passe (prévu)" className="size-3.5 shrink-0 text-ball" />}
           </>
         ) : (
           <span className="text-chalk/50">{m ? "à déterminer" : "–"}</span>
