@@ -130,6 +130,7 @@ function TournamentCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <Tag tone="neutral">{statusLabel(t.status, hasDraw(t))}</Tag>
+            {t.test && <Tag tone="alert">Test</Tag>}
             {me && <MyState status={t.status} me={me} winner={winners.has(me.entry_id)} />}
           </div>
           <h3 className="mt-2 font-display text-2xl leading-tight [overflow-wrap:anywhere]">

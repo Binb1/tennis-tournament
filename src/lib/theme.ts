@@ -112,6 +112,7 @@ export async function loadLiveTheme() {
     .from("tournaments")
     .select("theme")
     .eq("status", "live")
+    .eq("test", false)
     .not("theme", "is", null)
     .order("starts_at", { ascending: false })
     .limit(1)

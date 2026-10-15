@@ -125,6 +125,7 @@ The admin sets up a tournament once, then only confirms results round by round.
 6. **Status:** buttons to move draft → registration → live → finished.
 7. **Entries:** list of entrants; remove an entry or set a pick on someone's behalf. Every admin write is recorded in an audit log.
 8. **Sync panel:** last API sync time, errors, unmatched player names, "Sync now" button.
+9. **Test tournament:** one button creates (or resets) "Shanghai (test)", a 32 draw in registration only admins see, to try features on prod.
 
 ## Data model
 
@@ -133,7 +134,7 @@ Nine tables (including `profiles_private`) and one view. Survival is never store
 | Table | Key columns | Notes |
 |---|---|---|
 | profiles | id (= auth.users.id), username unique, is_admin bool | Created on first login; personal fields in profiles_private (owner-only) |
-| tournaments | id, name, tour, draw_size, status enum, starts_at, external_id | status: draft, registration, live, finished |
+| tournaments | id, name, tour, draw_size, status enum, starts_at, external_id, test | status: draft, registration, live, finished |
 | rounds | id, tournament_id, idx (1..n), name, locks_at | unique(tournament_id, idx) |
 | players | id, tournament_id, name, seed, external_id, country (FRA, GER…), ranking | The draw; country + ranking set by the API import |
 | matches | id, tournament_id, round_id, external_id, player1_id, player2_id, winner_id, scheduled_at, score, status (scheduled, live, done), position | One row per bracket slot, API only. position 1 = top; slot p of round k+1 is fed by slots 2p-1 and 2p of round k |
@@ -161,12 +162,13 @@ All rules live in the database. The browser can read public data and call 3 func
 | join_tournament(tournament_id) | Logged-in user | Tournament in registration, not already joined |
 | make_pick(round_id, player_id) | Logged-in user | Own entry, entry alive, now() < locks_at of that round (database clock), player in this tournament and not out, player not already used |
 | clear_pick(round_id) | Logged-in user | Own pick, now() < locks_at |
+| admin_reset_test_tournament() | Admin | Deletes the test tournament, recreates "Shanghai (test)" |
 | set_result(player_id, round_id, result) | Admin only | is_admin(); writes to admin_log |
 
 ### Tables
 
 - Security rules (RLS) on every table; no insert/update/delete policies for users.
-- Public read: tournaments (not draft), rounds, players, player_results, profiles.username.
+- Public read: tournaments (not draft, not test: test tournaments are admin only and score no season points), rounds, players, player_results, profiles.username.
 - Private: personal fields (email, ranking, region, city, country) in a separate `profiles_private` table, readable only by their owner.
 - Picks read: own picks always; others only once `locks_at <= now()`; admin always.
 - Backup constraints: unique(entry_id, round_id) and unique(entry_id, player_id).
