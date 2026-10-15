@@ -222,12 +222,11 @@ function derive(data: Data, uid: string | undefined, now: number) {
   const noPick = (entryId: string, r: Round): ChipState => (waived.has(`${entryId}:${r.id}`) ? "waived" : "missing")
   const currentRound = data.rounds.find((r) => !locked(r)) ?? null
 
-  /** Locked rounds + the current one; `all` adds the later open rounds too (my queued picks). */
-  function trail(entryId: string, all = false): TrailStep[] {
+  function trail(entryId: string): TrailStep[] {
     const picks = picksByEntry.get(entryId)
     const out = statusByEntry.get(entryId)?.eliminated_round ?? Infinity
     return data.rounds
-      .filter((r) => r.idx <= out && (all || locked(r) || r.id === currentRound?.id))
+      .filter((r) => r.idx <= out && (locked(r) || r.id === currentRound?.id))
       .map((round): TrailStep => {
         const pid = picks?.get(round.id)
         const player = pid ? playerById.get(pid) : undefined
@@ -253,7 +252,28 @@ function derive(data: Data, uid: string | undefined, now: number) {
     if (m.player2_id) matchOf.set(`${m.round_id}:${m.player2_id}`, m)
   }
 
-  return { result, playerById, picksByEntry, livePicks, roundByIdx, statusByEntry, lostRound, pickResult, currentRound, locked, noPick, trail, myEntry, myStatus, myPicks, matchOf }
+  // Each player's first bracket slot (round idx, position). Slot p of round k feeds slot ceil(p/2) of round k+1.
+  const slotOf = new Map<string, { k: number; p: number }>()
+  for (const m of data.matches) {
+    const k = idxOf.get(m.round_id)
+    if (!k || !m.position) continue
+    for (const pid of [m.player1_id, m.player2_id]) {
+      if (pid && k < (slotOf.get(pid)?.k ?? Infinity)) slotOf.set(pid, { k, p: m.position })
+    }
+  }
+  const lastIdx = Math.max(0, ...data.rounds.map((r) => r.idx))
+  /** Round idx in which two players would face each other, or null when unknown. */
+  const meetRound = (a: string, b: string) => {
+    const sa = slotOf.get(a)
+    const sb = slotOf.get(b)
+    if (!sa || !sb) return null
+    for (let k = Math.max(sa.k, sb.k); k <= lastIdx; k++) {
+      if (Math.ceil(sa.p / 2 ** (k - sa.k)) === Math.ceil(sb.p / 2 ** (k - sb.k))) return k
+    }
+    return null
+  }
+
+  return { result, playerById, picksByEntry, livePicks, meetRound, roundByIdx, statusByEntry, lostRound, pickResult, currentRound, locked, noPick, trail, myEntry, myStatus, myPicks, matchOf }
 }
 type Derived = ReturnType<typeof derive>
 
@@ -333,6 +353,7 @@ function MyPick({ data, d, onChanged }: { data: Data; d: Derived; onChanged: () 
   const [error, setError] = useState<string | null>(null)
   const [q, setQ] = useState("")
   const [roundId, setRoundId] = useState<string | null>(null)
+  const plannerRef = useRef<HTMLElement>(null)
   // Picks are open during registration and live, for every round not locked yet (queued picks).
   const status = data.t.status
   const openRounds = status === "live" || status === "registration" ? data.rounds.filter((r) => !d.locked(r)) : []
@@ -349,13 +370,14 @@ function MyPick({ data, d, onChanged }: { data: Data; d: Derived; onChanged: () 
     )
   }
 
-  const trail = d.trail(d.myEntry.id, true)
+  // History (locked rounds); the open rounds are in the planner below.
+  const trail = d.trail(d.myEntry.id).filter((s) => d.locked(s.round))
   const alive = d.myStatus?.alive ?? true
   const pickedId = round ? d.myPicks.get(round.id) : undefined
   const isCurrent = !!round && round.id === d.currentRound?.id
-  // Round of the status line: the open round, else (live) the last locked one.
+  // Status line: the last locked round, whose result is the one to wait for.
   const lockedRounds = data.rounds.filter(d.locked)
-  const statusRound = round ?? (status === "live" ? lockedRounds[lockedRounds.length - 1] : undefined)
+  const statusRound = status === "live" ? lockedRounds[lockedRounds.length - 1] : undefined
   const statusPid = statusRound ? d.myPicks.get(statusRound.id) : undefined
   const roundName = (idx: number) => d.roundByIdx.get(idx)?.name ?? `tour ${idx}`
   // Queued players who lost before their round: that pick is a loss unless changed before the lock.
@@ -364,17 +386,20 @@ function MyPick({ data, d, onChanged }: { data: Data; d: Derived; onChanged: () 
     return pid && d.lostRound.has(pid)
   })
 
+  // My picks in the other rounds of my path.
+  const others = data.rounds.flatMap((r) => {
+    const pid = r.id === round?.id ? undefined : d.myPicks.get(r.id)
+    return pid ? [{ r, pid }] : []
+  })
   // Why a player can't be picked, or null if he can.
-  const usedIn = new Map<string, string>()
-  for (const [rid, pid] of d.myPicks) if (rid !== round?.id) usedIn.set(pid, rid)
   const reason = (p: Player) => {
     const lost = d.lostRound.get(p.id)
     if (lost) return `Éliminé · ${roundName(lost)}`
-    const used = usedIn.get(p.id)
-    if (used) {
-      const r = data.rounds.find((x) => x.id === used)
-      return `${r && !d.locked(r) ? "Prévu" : "Déjà choisi"} · ${r?.name ?? ""}`
-    }
+    const used = others.find((o) => o.pid === p.id)
+    if (used) return `${d.locked(used.r) ? "Déjà choisi" : "Prévu"} · ${used.r.name}`
+    // Both must win up to the round they meet in: one of the two picks is a sure loss.
+    const clash = round && others.find((o) => (d.meetRound(p.id, o.pid) ?? Infinity) <= Math.min(round.idx, o.r.idx))
+    if (clash) return `Croise ${shortName(d.playerById.get(clash.pid)?.name ?? "")} · ${clash.r.name}`
     return null
   }
   const needle = q.trim().toLowerCase()
@@ -390,8 +415,18 @@ function MyPick({ data, d, onChanged }: { data: Data; d: Derived; onChanged: () 
     if (error) setError(error.message)
     else await onChanged()
     setSaving(null)
+    return !error
   }
-  const pick = (p: Player) => round && save("make_pick", p.id, { p_round_id: round.id, p_player_id: p.id })
+  async function pick(p: Player) {
+    if (!round) return
+    // Filling the path: after a first pick, go on to the next open round still without one.
+    const next = pickedId ? undefined : openRounds.find((r) => r.idx > round.idx && !d.myPicks.has(r.id))
+    if ((await save("make_pick", p.id, { p_round_id: round.id, p_player_id: p.id })) && next) {
+      setRoundId(next.id)
+      setQ("")
+      plannerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    }
+  }
   const clear = () => round && save("clear_pick", "clear", { p_round_id: round.id })
 
   return (
@@ -417,28 +452,11 @@ function MyPick({ data, d, onChanged }: { data: Data; d: Derived; onChanged: () 
 
       {trail.length > 0 && (
         <section>
-          <div className="mb-2 flex items-end justify-between gap-3">
-            <h2 className="micro-label">Mon parcours</h2>
-            {alive && openRounds.length > 1 && <span className="text-xs text-chalk/80">Touche un tour pour le préparer</span>}
-          </div>
+          <h2 className="micro-label mb-2">Mon parcours</h2>
           <div className="flex flex-wrap gap-1.5">
-            {trail.map((s) =>
-              alive && openRounds.includes(s.round) ? (
-                <button
-                  key={s.round.id}
-                  onClick={() => setRoundId(s.round.id)}
-                  aria-pressed={s.round.id === round?.id}
-                  className={cn(
-                    "rounded-[3px] outline-offset-2",
-                    s.round.id === round?.id ? "outline-2 outline-ball" : "hover:opacity-85",
-                  )}
-                >
-                  <Chip step={s} withPlayer />
-                </button>
-              ) : (
-                <Chip key={s.round.id} step={s} withPlayer />
-              ),
-            )}
+            {trail.map((s) => (
+              <Chip key={s.round.id} step={s} withPlayer />
+            ))}
           </div>
         </section>
       )}
@@ -454,6 +472,37 @@ function MyPick({ data, d, onChanged }: { data: Data; d: Derived; onChanged: () 
         <Empty>Aucun tour ouvert pour le moment.</Empty>
       ) : (
         <>
+          <section ref={plannerRef} className="scroll-mt-4">
+            <div className="mb-2 flex items-end justify-between gap-3">
+              <h2 className="micro-label">Mes choix à venir</h2>
+              {openRounds.length > 1 && <span className="text-xs text-chalk/80">Prépare tous les tours dès maintenant</span>}
+            </div>
+            <div className="grid grid-cols-3 gap-1.5 min-[520px]:grid-cols-4">
+              {openRounds.map((r) => {
+                const pid = d.myPicks.get(r.id)
+                const on = r.id === round.id
+                const out = !!pid && d.lostRound.has(pid)
+                return (
+                  <button
+                    key={r.id}
+                    onClick={() => setRoundId(r.id)}
+                    aria-pressed={on}
+                    className={cn(
+                      "min-h-12 min-w-0 rounded-[2px] border-2 px-2 py-1 text-left",
+                      on ? "border-chalk bg-chalk text-ink" : pid ? "border-chalk/80 hover:bg-chalk/10" : "border-dashed border-chalk/60 hover:bg-chalk/10",
+                      out && !on && "border-ball",
+                    )}
+                  >
+                    <span className="block truncate text-[11px] font-bold tracking-[0.08em] uppercase [font-stretch:85%]">{r.name}</span>
+                    <span className={cn("block truncate text-xs", !pid && "opacity-70", out && "line-through")}>
+                      {pid ? shortName(d.playerById.get(pid)?.name ?? "") : "à choisir"}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+
           {!pickedId &&
             (isCurrent ? (
               <div role="status" className="border-l-4 border-ball bg-ink/70 px-4 py-3 text-sm font-medium">
