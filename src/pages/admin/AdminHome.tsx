@@ -59,6 +59,9 @@ export default function AdminHome() {
   const style = theme ?? suggestTheme(name) ?? ""
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  const [resetting, setResetting] = useState(false)
+  const [testError, setTestError] = useState<string | null>(null)
+  const testT = rows?.find((t) => t.test)
 
   useEffect(() => {
     let active = true
@@ -110,6 +113,17 @@ export default function AdminHome() {
     navigate(`/admin/tournois/${t.id}`)
   }
 
+  /** Fresh "Shanghai (test)": only admins see it, no season points (migration 0013). */
+  async function resetTest() {
+    if (testT && !confirm("Réinitialiser le tournoi test ? Ses inscriptions, choix et résultats seront supprimés.")) return
+    setResetting(true)
+    setTestError(null)
+    const { data: id, error } = await supabase.rpc("admin_reset_test_tournament")
+    setResetting(false)
+    if (error) return setTestError(error.message)
+    navigate(`/tournois/${id}`)
+  }
+
   return (
     <AppShell>
       <PageTitle eyebrow="Administration">Admin</PageTitle>
@@ -128,6 +142,7 @@ export default function AdminHome() {
                     <Box className="flex items-center gap-3 px-4 py-4 transition-colors hover:bg-chalk/10">
                       <div className="min-w-0 flex-1">
                         <Tag tone={t.status === "draft" ? "out" : "neutral"}>{statusLabel(t.status, hasDraw(t))}</Tag>
+                        {t.test && <span className="ml-2"><Tag tone="alert">Test</Tag></span>}
                         <h3 className="mt-2 font-display text-2xl leading-tight">{t.name}</h3>
                         <p className="mt-1 text-sm text-chalk/85">
                           {t.tour} · tableau {t.draw_size} · {formatDate(t.starts_at)}
@@ -140,6 +155,27 @@ export default function AdminHome() {
               </div>
             </div>
           ))}
+      </section>
+
+      <section className="mb-10">
+        <h2 className="micro-label mb-3">Tournoi test</h2>
+        <Box className="space-y-3 px-4 py-5">
+          <p className="text-sm text-chalk/90">
+            Shanghai, tableau 32, inscriptions ouvertes, 1er tour verrouillé dans 24 h puis un tour par jour. Visible
+            par les admins seulement, sans points de saison.
+          </p>
+          {testError && <ErrorBox message={testError} />}
+          <div className="flex flex-wrap gap-3">
+            <ChalkButton type="button" onClick={resetTest} disabled={resetting}>
+              {resetting ? "Préparation…" : testT ? "Réinitialiser le tournoi test" : "Créer le tournoi test"}
+            </ChalkButton>
+            {testT && (
+              <Link to={`/tournois/${testT.id}`} className="self-center text-sm font-bold underline underline-offset-4">
+                Ouvrir
+              </Link>
+            )}
+          </div>
+        </Box>
       </section>
 
       <section>

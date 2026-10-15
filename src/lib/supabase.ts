@@ -31,6 +31,8 @@ export type Tournament = {
   theme?: string | null
   /** Admin toggle: people can join while live (a round still open); missed rounds are waived. Migration 0009. */
   late_join: boolean
+  /** Test tournament: only admins see it, no season points. Migration 0013. */
+  test?: boolean
 }
 
 /** Joining: during registration, or while live with late sign-ups on and a round still open. */
