@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react"
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom"
-import { ArrowLeft, Check, ChevronRight, Search } from "lucide-react"
+import { ArrowLeft, Check, ChevronRight } from "lucide-react"
 
-import { AppShell, Box, ChalkButton, ErrorBox, LineButton, Loading, PageTitle, ResultTag, Tag } from "@/components/court/AppShell"
+import { AppShell, Box, ChalkButton, ErrorBox, LineButton, Loading, PageTitle, ResultTag, SearchInput, Tag } from "@/components/court/AppShell"
 import { Bracket } from "@/components/court/Bracket"
 import { Flag, MatchLine, PlayerName } from "@/components/court/PlayerLabel"
 import { SocialIcons } from "@/components/court/Socials"
@@ -1461,22 +1461,6 @@ function ChipButton({ on, ...props }: ComponentProps<"button"> & { on: boolean }
 }
 
 /* ------------------------------------------------------------------ */
-
-function SearchInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
-  return (
-    <label className="relative block">
-      <span className="sr-only">{placeholder}</span>
-      <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-chalk/70" />
-      <input
-        type="search"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="h-11 w-full rounded-[2px] border-2 border-chalk/90 bg-brick/25 pr-3 pl-9 text-base text-chalk placeholder:text-chalk/55 focus:bg-brick/40 focus:outline-none"
-      />
-    </label>
-  )
-}
 
 function Empty({ children }: { children: ReactNode }) {
   return <p className="border-2 border-dashed border-chalk/60 px-4 py-6 text-center text-chalk/90">{children}</p>

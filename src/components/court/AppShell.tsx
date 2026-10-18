@@ -1,6 +1,6 @@
 import { useState, type ComponentProps, type ReactNode } from "react"
 import { Link, NavLink } from "react-router-dom"
-import { Eye, EyeOff } from "lucide-react"
+import { Eye, EyeOff, Search } from "lucide-react"
 
 import { BallMark } from "@/components/court/BallMark"
 import { SurfaceMenu } from "@/components/court/SurfacePicker"
@@ -184,6 +184,22 @@ export function PasswordField({ label, hint, ...props }: Omit<ComponentProps<"in
       </label>
       {hint && <span className="mt-1.5 block text-xs text-chalk/75">{hint}</span>}
     </div>
+  )
+}
+
+export function SearchInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+  return (
+    <label className="relative block">
+      <span className="sr-only">{placeholder}</span>
+      <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-chalk/70" />
+      <input
+        type="search"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="h-11 w-full rounded-[2px] border-2 border-chalk/90 bg-brick/25 pr-3 pl-9 text-base text-chalk placeholder:text-chalk/55 focus:bg-brick/40 focus:outline-none"
+      />
+    </label>
   )
 }
 

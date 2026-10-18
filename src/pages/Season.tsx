@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 
-import { AppShell, Box, ErrorBox, Loading, PageTitle } from "@/components/court/AppShell"
+import { AppShell, Box, ErrorBox, Loading, PageTitle, SearchInput } from "@/components/court/AppShell"
 import { useAuth } from "@/lib/auth"
 import { POINTS_PER_ROUND, POINTS_PER_WIN, fetchSeasons, rankSeason, seasonsOf, type SeasonRow } from "@/lib/season"
 import { displayName } from "@/lib/supabase"
@@ -16,6 +16,7 @@ export default function Season() {
   const [error, setError] = useState<string | null>(null)
   const [reload, setReload] = useState(0)
   const [chosen, setChosen] = useState<number | null>(null)
+  const [q, setQ] = useState("")
 
   useEffect(() => {
     let active = true
@@ -31,12 +32,14 @@ export default function Season() {
   const season = chosen ?? seasons[0] ?? new Date().getFullYear()
   const ranked = rankSeason((rows ?? []).filter((r) => r.season === season))
   const me = ranked.find((r) => r.user_id === uid)
+  const needle = q.trim().toLowerCase()
+  const shown = needle ? ranked.filter((r) => displayName(r).toLowerCase().includes(needle)) : ranked
 
   return (
     <AppShell>
       <PageTitle eyebrow="Classement général">Saison {season}</PageTitle>
       <p className="-mt-2 mb-6 text-sm text-chalk/85">
-        {POINTS_PER_ROUND} pts par tour gagné · +{POINTS_PER_WIN} par tournoi remporté. Les tours repêchés ne rapportent rien.
+        {POINTS_PER_ROUND} pts par tour gagné · +{POINTS_PER_WIN} par tournoi remporté. Un tour passé sans choix (repêché par l'admin) ne rapporte rien.
       </p>
 
       {seasons.length > 1 && (
@@ -87,8 +90,18 @@ export default function Season() {
       )}
 
       {ranked.length > 0 && (
+        <div className="mb-3">
+          <SearchInput value={q} onChange={setQ} placeholder="Chercher un pseudo" />
+        </div>
+      )}
+
+      {ranked.length > 0 && shown.length === 0 && (
+        <p className="border-2 border-dashed border-chalk/60 px-4 py-6 text-center text-chalk/90">Aucun joueur trouvé.</p>
+      )}
+
+      {shown.length > 0 && (
         <ol className="border-2 border-chalk/90">
-          {ranked.map((r) => {
+          {shown.map((r) => {
             const mine = r.user_id === uid
             return (
               <li
@@ -105,8 +118,8 @@ export default function Season() {
                     {mine && <span className="ml-1.5 text-xs opacity-75">(moi)</span>}
                   </p>
                   <p className="text-xs text-chalk/80">
-                    {plural(r.rounds_won, "tour gagné", "tours gagnés")} · {plural(r.tournaments_played, "tournoi", "tournois")}
-                    {r.tournaments_won > 0 && ` · ${plural(r.tournaments_won, "victoire", "victoires")}`}
+                    {plural(r.rounds_won, "tour gagné", "tours gagnés")} · {plural(r.tournaments_played, "tournoi joué", "tournois joués")}
+                    {r.tournaments_won > 0 && ` · ${plural(r.tournaments_won, "remporté", "remportés")}`}
                   </p>
                 </div>
                 <span className="shrink-0 text-right">
