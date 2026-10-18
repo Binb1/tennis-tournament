@@ -30,6 +30,9 @@ export const roundPoints = (c: Category | null | undefined, idx: number, lastIdx
 /** Pool winner bonus, and the same for a right champion prediction. */
 export const bonusPoints = (c: Category | null | undefined) => BONUS * multiplier(c)
 
+/** Rounds of a draw before its rounds exist (same count as the admin's round generator). */
+export const roundsOfDraw = (drawSize: number) => Math.max(1, Math.round(Math.log2(drawSize)))
+
 /** A perfect run: every round won, pool won, champion predicted. */
 export const maxPoints = (c: Category, rounds: number) =>
   Array.from({ length: rounds }, (_, i) => roundWeight(i)).reduce((a, b) => a + b, 0) * multiplier(c) + 2 * bonusPoints(c)

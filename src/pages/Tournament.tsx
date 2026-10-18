@@ -4,6 +4,7 @@ import { ArrowLeft, Check, ChevronRight } from "lucide-react"
 
 import { AppShell, Box, ChalkButton, ErrorBox, FindMe, LineButton, Loading, ME_ROW, PageTitle, ResultTag, SearchInput, Tag } from "@/components/court/AppShell"
 import { Bracket } from "@/components/court/Bracket"
+import { StakeCard } from "@/components/court/PointsStake"
 import { Flag, MatchLine, PlayerName } from "@/components/court/PlayerLabel"
 import { SocialIcons } from "@/components/court/Socials"
 import { BallBoyRun, PixelNetFault, PixelWin, ShotClock } from "@/components/pixel/Animations"
@@ -186,6 +187,8 @@ function TournamentView({ id }: { id: string }) {
       <p className="-mt-2 mb-5 text-sm text-chalk/85">
         {formatDate(t.starts_at)} · {data.entries.length} {data.entries.length > 1 ? "inscrits" : "inscrit"}
       </p>
+
+      {!t.test && data.rounds.length > 0 && <StakeCard category={t.category} rounds={data.rounds} />}
 
       {canJoin(t, data.rounds, now) && !d.myEntry && (
         <div className="mb-6 space-y-3">

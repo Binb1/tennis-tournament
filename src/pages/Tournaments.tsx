@@ -3,9 +3,11 @@ import { Link } from "react-router-dom"
 import { ChevronRight } from "lucide-react"
 
 import { AppShell, Box, ErrorBox, Loading, PageTitle, ResultTag, Tag } from "@/components/court/AppShell"
+import { StakeTag } from "@/components/court/PointsStake"
 import { MiniCourt } from "@/components/court/SurfacePicker"
 import { BallConfetti } from "@/components/pixel/Animations"
 import { useAuth } from "@/lib/auth"
+import { roundsOfDraw } from "@/lib/scoring"
 import { Once } from "@/lib/seen"
 import { isThemeId, themeLabel } from "@/lib/theme"
 import {
@@ -195,6 +197,7 @@ function TournamentCard({
           <div className="flex flex-wrap items-center gap-2">
             <Tag tone="neutral">{statusLabel(t.status, hasDraw(t))}</Tag>
             {t.test && <Tag tone="alert">Test</Tag>}
+            {!t.test && <StakeTag category={t.category} rounds={roundsOfDraw(t.draw_size)} />}
             {me && <MyState status={t.status} me={me} winner={winners.has(me.entry_id)} />}
           </div>
           <h3 className="mt-2 font-display text-2xl leading-tight [overflow-wrap:anywhere]">
