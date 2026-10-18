@@ -1,8 +1,9 @@
 import { useState, type ComponentProps, type ReactNode } from "react"
 import { Link, NavLink } from "react-router-dom"
-import { Eye, EyeOff } from "lucide-react"
+import { Eye, EyeOff, ListOrdered, Search, Shield, Trophy, User, type LucideIcon } from "lucide-react"
 
 import { BallMark } from "@/components/court/BallMark"
+import { PixelLoader } from "@/components/pixel/Animations"
 import { SurfaceMenu } from "@/components/court/SurfacePicker"
 import { useAuth } from "@/lib/auth"
 import { cn } from "@/lib/utils"
@@ -16,21 +17,66 @@ import "@/components/pixel/pixel.css"
 /** `wide`: desktop pages that need more than the phone column (the picks planner and its draw). */
 export function AppShell({ children, bare = false, wide = false }: { children: ReactNode; bare?: boolean; wide?: boolean }) {
   const { profile } = useAuth()
+  const items: [string, string, LucideIcon][] = [
+    ["/tournois", "Tournois", Trophy],
+    ["/saison", "Saison", ListOrdered],
+    ["/profil", "Profil", User],
+    ...(profile?.is_admin ? [["/admin", "Admin", Shield] as [string, string, LucideIcon]] : []),
+  ]
   return (
-    <div className="page-surface flex min-h-svh flex-col overflow-x-clip text-chalk">
+    // --tabbar: height of the phone tab bar, for sticky bars that must sit above it.
+    <div
+      className={cn(
+        "page-surface flex min-h-svh flex-col overflow-x-clip text-chalk",
+        !bare && "pb-(--tabbar) [--tabbar:calc(3.5rem+env(safe-area-inset-bottom))] md:[--tabbar:0px]",
+      )}
+    >
       <SiteHeader wide={wide}>
         {!bare && (
-          <nav className="flex gap-3 text-sm font-medium min-[400px]:gap-4">
-            <NavItem to="/tournois">Tournois</NavItem>
-            <NavItem to="/saison">Saison</NavItem>
-            <NavItem to="/profil">Profil</NavItem>
-            {profile?.is_admin && <NavItem to="/admin">Admin</NavItem>}
+          <nav className="hidden gap-4 text-sm font-medium md:flex">
+            {items.map(([to, label]) => (
+              <NavItem key={to} to={to}>
+                {label}
+              </NavItem>
+            ))}
           </nav>
         )}
       </SiteHeader>
       <main className={cn("mx-auto w-full max-w-[600px] flex-1 px-4 pt-5 pb-16 md:pt-8", wide && "lg:max-w-[1400px]")}>{children}</main>
       <SiteFooter />
+      {!bare && <TabBar items={items} />}
     </div>
+  )
+}
+
+/** Phone navigation: the same links as the header, at thumb height. */
+function TabBar({ items }: { items: [string, string, LucideIcon][] }) {
+  return (
+    <nav
+      aria-label="Navigation"
+      className="wall fixed inset-x-0 bottom-0 z-30 grid border-t-2 border-chalk/90 pb-[env(safe-area-inset-bottom)] md:hidden"
+      style={{ gridTemplateColumns: `repeat(${items.length}, 1fr)` }}
+    >
+      {items.map(([to, label, Icon]) => (
+        <NavLink
+          key={to}
+          to={to}
+          className={({ isActive }) =>
+            cn(
+              "flex h-14 flex-col items-center justify-center gap-1 text-[11px] font-bold tracking-[0.1em] uppercase [font-stretch:85%]",
+              isActive ? "text-chalk" : "text-chalk/65",
+            )
+          }
+        >
+          {({ isActive }) => (
+            <>
+              <Icon className="size-5" strokeWidth={isActive ? 2.5 : 2} aria-hidden="true" />
+              <span className={cn("border-b-2 pb-px", isActive ? "border-chalk" : "border-transparent")}>{label}</span>
+            </>
+          )}
+        </NavLink>
+      ))}
+    </nav>
   )
 }
 
@@ -64,8 +110,11 @@ export function SiteFooter({ className }: { className?: string }) {
   return (
     <footer className={cn("relative z-10", className)}>
       <div aria-hidden="true" className="wall-band rotate-180" />
-      <div className="wall flex h-16 items-center justify-center">
+      <div className="wall flex h-16 items-center justify-center gap-4">
         <span className="font-brand text-sm leading-none opacity-45">Tiebreakers</span>
+        <Link to="/regles" className="inline-flex min-h-11 items-center text-xs font-medium text-chalk/80 underline underline-offset-4 hover:text-chalk">
+          Règles du jeu
+        </Link>
       </div>
     </footer>
   )
@@ -187,12 +236,40 @@ export function PasswordField({ label, hint, ...props }: Omit<ComponentProps<"in
   )
 }
 
-export function Loading({ label = "Chargement…" }: { label?: string }) {
+export function SearchInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
   return (
-    <p role="status" className="micro-label py-10 text-center">
-      {label}
-    </p>
+    <label className="relative block">
+      <span className="sr-only">{placeholder}</span>
+      <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-chalk/70" />
+      <input
+        type="search"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="h-11 w-full rounded-[2px] border-2 border-chalk/90 bg-brick/25 pr-3 pl-9 text-base text-chalk placeholder:text-chalk/55 focus:bg-brick/40 focus:outline-none"
+      />
+    </label>
   )
+}
+
+/** DOM id of my row in a ranking, for FindMe. */
+export const ME_ROW = "me-row"
+
+/** Scrolls to my row in a ranking. `onFind` clears the search first, so the row is there. */
+export function FindMe({ onFind }: { onFind: () => void }) {
+  function find() {
+    onFind()
+    requestAnimationFrame(() => document.getElementById(ME_ROW)?.scrollIntoView({ behavior: "smooth", block: "center" }))
+  }
+  return (
+    <LineButton onClick={find} className="shrink-0 px-3">
+      Me trouver
+    </LineButton>
+  )
+}
+
+export function Loading({ label = "Chargement…" }: { label?: string }) {
+  return <PixelLoader label={label} />
 }
 
 /** Inline error (RPC messages are already in French). */

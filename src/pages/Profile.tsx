@@ -15,7 +15,7 @@ import {
   type Tournament,
 } from "@/lib/supabase"
 import { MyState } from "@/pages/Tournaments"
-import { POINTS_PER_WIN, fetchSeasons, rankSeason, seasonsOf, type EntryPoints, type Ranked } from "@/lib/season"
+import { POINTS_PER_ROUND, POINTS_PER_WIN, fetchSeasons, rankSeason, seasonsOf, type EntryPoints, type Ranked } from "@/lib/season"
 import { HandleField, SocialLinks, parseSocials } from "@/components/court/Socials"
 
 /** Public X / Instagram handles: shown as links, editable in place. */
@@ -261,9 +261,13 @@ function MySeasons({ mine, players }: { mine: Ranked[]; players: Record<number, 
   const [cur, ...past] = mine
   const tiles = [
     { label: "Classement", value: `${cur.rank}${cur.rank === 1 ? "er" : "e"}`, sub: `sur ${players[cur.season]}${cur.tied ? " · ex æquo" : ""}` },
-    { label: "Points", value: cur.points, sub: `${cur.tournaments_played} ${cur.tournaments_played > 1 ? "tournois" : "tournoi"}` },
-    { label: "Tours gagnés", value: cur.rounds_won, sub: "avec un vrai choix" },
-    { label: "Victoires", value: cur.tournaments_won, sub: cur.tournaments_won > 0 ? `+${cur.tournaments_won * POINTS_PER_WIN} pts` : "pas encore" },
+    { label: "Points", value: cur.points, sub: `${cur.tournaments_played} ${cur.tournaments_played > 1 ? "tournois joués" : "tournoi joué"}` },
+    { label: "Tours gagnés", value: cur.rounds_won, sub: `+${cur.rounds_won * POINTS_PER_ROUND} pts · ${POINTS_PER_ROUND} par tour` },
+    {
+      label: "Tournois gagnés",
+      value: cur.tournaments_won,
+      sub: cur.tournaments_won > 0 ? `+${cur.tournaments_won * POINTS_PER_WIN} pts` : `+${POINTS_PER_WIN} pts par tournoi`,
+    },
   ]
   return (
     <section className="mb-10">

@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react"
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom"
-import { ArrowLeft, Check, ChevronRight, Search } from "lucide-react"
+import { ArrowLeft, Check, ChevronRight } from "lucide-react"
 
-import { AppShell, Box, ChalkButton, ErrorBox, LineButton, Loading, PageTitle, ResultTag, Tag } from "@/components/court/AppShell"
+import { AppShell, Box, ChalkButton, ErrorBox, FindMe, LineButton, Loading, ME_ROW, PageTitle, ResultTag, SearchInput, Tag } from "@/components/court/AppShell"
 import { Bracket } from "@/components/court/Bracket"
 import { Flag, MatchLine, PlayerName } from "@/components/court/PlayerLabel"
 import { SocialIcons } from "@/components/court/Socials"
+import { BallBoyRun, PixelNetFault, PixelWin, ShotClock } from "@/components/pixel/Animations"
 import { useAuth } from "@/lib/auth"
+import { Once } from "@/lib/seen"
 import { useThemeOverride } from "@/lib/theme"
 import { formatLeft, useNow } from "@/lib/time"
 import { cn } from "@/lib/utils"
@@ -83,13 +85,15 @@ function TournamentView({ id }: { id: string }) {
   const uid = session?.user.id
   const [data, setData] = useState<Data | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<"pick" | "board" | "draw">("pick")
   const [now, setNow] = useState(() => Date.now())
   const [joinError, setJoinError] = useState<string | null>(null)
   const [joining, setJoining] = useState(false)
   // "Remplir tous les tours" lives in the URL, so the phone's back button closes it.
   const [params, setParams] = useSearchParams()
   const planning = params.get("remplir") === "1"
+  // The tab is in the URL too, so a link (or a refresh) lands on it.
+  const tab = TAB_OF[params.get("onglet") ?? ""] ?? "pick"
+  const setTab = (v: Tab) => setParams(v === "pick" ? {} : { onglet: TAB_PARAM[v] }, { replace: true })
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -311,7 +315,11 @@ type Derived = ReturnType<typeof derive>
 
 /* ------------------------------------------------------------------ */
 
-function Tabs({ value, onChange }: { value: "pick" | "board" | "draw"; onChange: (v: "pick" | "board" | "draw") => void }) {
+type Tab = "pick" | "board" | "draw"
+const TAB_PARAM: Record<Tab, string> = { pick: "choix", board: "classement", draw: "tableau" }
+const TAB_OF: Record<string, Tab> = { choix: "pick", classement: "board", tableau: "draw" }
+
+function Tabs({ value, onChange }: { value: Tab; onChange: (v: Tab) => void }) {
   const tabs = [
     ["pick", "Mon choix"],
     ["board", "Classement"],
@@ -440,6 +448,8 @@ function MyPick({ data, d, onChanged, onPlan }: { data: Data; d: Derived; onChan
         </div>
       )}
 
+      {statusRound && statusPid && <ResultMoment id={`${d.myEntry.id}:${statusRound.id}`} result={d.pickResult(statusPid, statusRound)} />}
+
       {statusRound && statusPid && (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-l-4 border-chalk bg-brick/40 px-4 py-3 text-sm">
           <span>Mon choix · {statusRound.name} :</span>
@@ -514,6 +524,18 @@ function MyPick({ data, d, onChanged, onPlan }: { data: Data; d: Derived; onChan
         </>
       )}
     </div>
+  )
+}
+
+/** My pick's result, played once per device: the player jumps for a win, the ball clips the net for a loss. */
+function ResultMoment({ id, result }: { id: string; result: "won" | "lost" | undefined }) {
+  if (!result) return null
+  return (
+    <Once id={`${result}:pick:${id}`}>
+      <Box aria-hidden="true" className="flex justify-center px-4 py-4">
+        {result === "won" ? <PixelWin /> : <PixelNetFault />}
+      </Box>
+    </Once>
   )
 }
 
@@ -747,7 +769,7 @@ function Planner({ data, d, onChanged, onClose }: { data: Data; d: Derived; onCh
             <PlayerPicker key={round.id} data={data} d={d} round={round} onChanged={onChanged} />
 
             {/* Step nav, always at hand under the long player list. */}
-            <div className="clay-surface sticky bottom-0 z-10 -mx-4 flex gap-2 border-t-2 border-chalk/90 px-4 py-3 lg:mx-0 lg:px-0">
+            <div className="clay-surface sticky bottom-(--tabbar) z-10 -mx-4 flex gap-2 border-t-2 border-chalk/90 px-4 py-3 lg:mx-0 lg:px-0">
               <LineButton onClick={() => go(step - 1)} disabled={step === 0} className="flex-1">
                 ← Précédent
               </LineButton>
@@ -840,16 +862,22 @@ function MyBracket({ data, d, round, boxClassName }: { data: Data; d: Derived; r
  *  follows the order of play, so it is only an estimate until then. */
 function LockBlock({ round, planned = false }: { round: Round; planned?: boolean }) {
   const now = useNow(1000)
+  const ms = new Date(round.locks_at).getTime() - now
+  // Last hour of the round to play: shot clock (blinks under 10 min) and a ball boy running along the box.
+  const hurry = !planned && ms > 0 && ms < 3_600_000
   return (
-    <Box className="scoreboard px-4 py-4">
+    <Box className={cn("scoreboard px-4 pt-4", hurry ? "pb-1" : "pb-4")}>
       <span className="micro-label">{round.name} · verrouillage {planned ? "prévu " : ""}dans</span>
-      <p className="scoreboard-digits mt-1 font-num text-4xl leading-tight tabular-nums">
-        {formatLeft(new Date(round.locks_at).getTime() - now)}
-      </p>
+      {hurry ? (
+        <ShotClock ms={ms} className="mt-2" />
+      ) : (
+        <p className="scoreboard-digits mt-1 font-num text-4xl leading-tight tabular-nums">{formatLeft(ms)}</p>
+      )}
       <p className="mt-1 text-sm text-chalk/85">
         Heure locale : {formatDate(round.locks_at, true)}
         {planned && " · suit le programme, peut avancer"}
       </p>
+      {hurry && <BallBoyRun className="mt-1" />}
     </Box>
   )
 }
@@ -953,7 +981,14 @@ function Leaderboard({ data, d, uid }: { data: Data; d: Derived; uid?: string })
 
       {view === "stats" && <Stats data={data} d={d} rounds={lockedRounds} myRank={myRank} total={total} />}
 
-      {(view === "list" || view === "grid") && <SearchInput value={q} onChange={setQ} placeholder="Pseudo ou joueur" />}
+      {(view === "list" || view === "grid") && (
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <SearchInput value={q} onChange={setQ} placeholder="Pseudo ou joueur" />
+          </div>
+          {myIdx >= 0 && view === "list" && <FindMe onFind={() => setQ("")} />}
+        </div>
+      )}
 
       {view === "grid" && <Grid d={d} rounds={lockedRounds} rows={shown} uid={uid} />}
 
@@ -962,7 +997,7 @@ function Leaderboard({ data, d, uid }: { data: Data; d: Derived; uid?: string })
           const on = highlight === r.e.id
           const me = !!uid && r.e.user_id === uid
           return (
-            <li key={r.e.id} className="border-t-2 border-chalk/50 first:border-t-0">
+            <li key={r.e.id} id={me ? ME_ROW : undefined} className="scroll-mt-24 border-t-2 border-chalk/50 first:border-t-0">
               {/* div role=button: the row holds social links, and <a> can't nest in <button>. */}
               <div
                 role="button"
@@ -1461,22 +1496,6 @@ function ChipButton({ on, ...props }: ComponentProps<"button"> & { on: boolean }
 }
 
 /* ------------------------------------------------------------------ */
-
-function SearchInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
-  return (
-    <label className="relative block">
-      <span className="sr-only">{placeholder}</span>
-      <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-chalk/70" />
-      <input
-        type="search"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="h-11 w-full rounded-[2px] border-2 border-chalk/90 bg-brick/25 pr-3 pl-9 text-base text-chalk placeholder:text-chalk/55 focus:bg-brick/40 focus:outline-none"
-      />
-    </label>
-  )
-}
 
 function Empty({ children }: { children: ReactNode }) {
   return <p className="border-2 border-dashed border-chalk/60 px-4 py-6 text-center text-chalk/90">{children}</p>

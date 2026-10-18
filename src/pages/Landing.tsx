@@ -4,6 +4,7 @@ import { Link } from "react-router-dom"
 
 import { SiteFooter, SiteHeader } from "@/components/court/AppShell"
 import { CourtLine } from "@/components/court/CourtLine"
+import { PixelRally } from "@/components/pixel/Animations"
 import { UmpireChair } from "@/components/court/UmpireChair"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth"
@@ -142,6 +143,9 @@ function Court() {
         >
           Tiebreakers
         </h1>
+        <div aria-hidden="true" className="animate-rise mt-[4cqw] w-[70%]" style={{ animationDelay: "300ms" }}>
+          <PixelRally />
+        </div>
       </Zone>
 
       <Zone top={serviceTop} height={box} width={50}>
