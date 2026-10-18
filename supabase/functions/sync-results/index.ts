@@ -225,8 +225,9 @@ async function syncResults(db: Db, c: Api, t: Tournament) {
  * Hourly cron run. Status moves first (registration -> live at the first lock), then within the budget:
  * - results of each live tournament, only while a match is due (start time passed, not finished) or every 6 h to
  *   pick up the next order of play; several live tournaments share the budget (each at most every n*24/40 h);
- * - draws in the 3 days before the first lock, every 6 h (2 h in the last 12 h), imported once complete
- *   (or partial in the last 12 h: qualifiers fill in on the next checks).
+ * - draws in the 3 days before the first lock, every 6 h (2 h in the last 12 h), imported as soon as they name
+ *   players (qualifiers fill in on the next checks), stored again only when new players show up, or on every check
+ *   in the last 12 h (order of play -> lock times).
  * Status moves again at the end (live -> finished once the final is won).
  */
 async function scheduledRun(db: Db, key: string) {
@@ -268,11 +269,13 @@ async function scheduledRun(db: Db, key: string) {
     if (now - lastRun(t.id, "draw") < (toLock < 12 * HOUR ? 2 : 6) * HOUR - SLACK) continue
     if (left < 2) break
     const c = { key, calls: 0 }
-    const run = { tournament_id: t.id, kind: "draw", ok: false, updated: 0, error: null as string | null }
+    const run = { tournament_id: t.id, kind: "draw", ok: false, matches: 0, updated: 0, error: null as string | null }
     try {
       const d = await fetchDraw(c, t)
-      const found = d?.singles?.length ? parseDraw(d).length : 0
-      if (found >= t.draw_size || (found > 0 && toLock < 12 * HOUR)) run.updated = (await storeDraw(db, c, t, [d], d)).inserted
+      run.matches = d?.singles?.length ?? 0 // 0 = the API has no draw yet
+      const found = run.matches ? parseDraw(d).length : 0
+      const have = t.players[0]?.count ?? 0
+      if (found > have || (found > 0 && toLock < 12 * HOUR)) run.updated = (await storeDraw(db, c, t, [d], d)).inserted
       run.ok = true
     } catch (e) {
       run.error = e instanceof Error ? e.message : String(e)
