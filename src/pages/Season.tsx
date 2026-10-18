@@ -4,9 +4,9 @@ import { Link } from "react-router-dom"
 import { AppShell, Box, ErrorBox, FindMe, Loading, ME_ROW, PageTitle, SearchInput } from "@/components/court/AppShell"
 import { ClimbArrow, PixelPodium } from "@/components/pixel/Animations"
 import { useAuth } from "@/lib/auth"
-import { fetchSeasons, rankSeason, seasonsOf, type SeasonRow } from "@/lib/season"
+import { fetchLastReset, fetchSeasons, rankSeason, seasonsOf, type SeasonRow } from "@/lib/season"
 import { readSeen, writeSeen } from "@/lib/seen"
-import { displayName } from "@/lib/supabase"
+import { displayName, formatDate } from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
 const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`
@@ -15,6 +15,7 @@ export default function Season() {
   const { session } = useAuth()
   const uid = session?.user.id
   const [rows, setRows] = useState<SeasonRow[] | null>(null)
+  const [resetAt, setResetAt] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [reload, setReload] = useState(0)
   const [chosen, setChosen] = useState<number | null>(null)
@@ -30,8 +31,12 @@ export default function Season() {
 
   useEffect(() => {
     let active = true
-    fetchSeasons()
-      .then((r) => active && setRows(r))
+    Promise.all([fetchSeasons(), fetchLastReset()])
+      .then(([r, at]) => {
+        if (!active) return
+        setRows(r)
+        setResetAt(at)
+      })
       .catch((e: Error) => active && setError(e.message))
     return () => {
       active = false
@@ -66,6 +71,11 @@ export default function Season() {
           Comment marquer des points
         </Link>
       </p>
+      {resetAt && new Date(resetAt).getFullYear() === season && (
+        <p className="-mt-3 mb-6 border-l-4 border-chalk bg-brick/40 px-4 py-3 text-sm">
+          Points remis à zéro le {formatDate(resetAt)} : seuls les tours verrouillés depuis comptent.
+        </p>
+      )}
 
       {seasons.length > 1 && (
         <div className="mb-6 flex flex-wrap gap-2">
