@@ -62,4 +62,13 @@ export function fetchSeasons(): Promise<SeasonRow[]> {
   )
 }
 
+/**
+ * Latest season points reset (migration 0015), or null: points count from rounds locked after it.
+ * Only feeds a note, so an error (e.g. the migration not applied yet) is no reset rather than a broken page.
+ */
+export async function fetchLastReset(): Promise<string | null> {
+  const { data } = await supabase.from("season_resets").select("at").order("at", { ascending: false }).limit(1)
+  return (data as { at: string }[] | null)?.[0]?.at ?? null
+}
+
 export const seasonsOf = (rows: { season: number }[]) => [...new Set(rows.map((r) => r.season))].sort((a, b) => b - a)
