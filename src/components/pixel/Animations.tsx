@@ -207,22 +207,34 @@ export function ClimbArrow({ className }: { className?: string }) {
 
 const METAL = { 1: "#e9b949", 2: "#c9ccd1", 3: "#c0763b" } as const
 
-/** Top 3 of the season: steps of a podium, each with a racket in gold / silver / bronze. */
-export function PixelPodium({ names, className }: { names: [string, string, string]; className?: string }) {
+/**
+ * Top 3 of the season: steps of a podium, each with a racket in gold / silver / bronze.
+ * `ranks`: shown ranks when there are ties (e.g. [1, 1, 3]); the racket follows the rank.
+ */
+export function PixelPodium({
+  names,
+  ranks = [1, 2, 3],
+  className,
+}: {
+  names: [string, string, string]
+  ranks?: [number, number, number]
+  className?: string
+}) {
+  const metal = (rank: number) => METAL[Math.min(3, rank) as 1 | 2 | 3]
   const places = [
-    { rank: 2 as const, h: 18, name: names[1] },
-    { rank: 1 as const, h: 26, name: names[0] },
-    { rank: 3 as const, h: 12, name: names[2] },
+    { rank: ranks[1], i: 2, h: 18, name: names[1] },
+    { rank: ranks[0], i: 1, h: 26, name: names[0] },
+    { rank: ranks[2], i: 3, h: 12, name: names[2] },
   ]
   return (
     <div className={cn("grid grid-cols-3 items-end gap-2", className)}>
       {places.map((p) => (
-        <div key={p.rank} className="flex flex-col items-center">
+        <div key={p.i} className="flex flex-col items-center">
           <PixelSvg w={5} h={9} className="mb-1 w-5">
             <Sprite
               rows={RACKET}
               className="px-hop"
-              style={{ "--px-metal": METAL[p.rank], "--delay": `${p.rank * 0.25}s` } as CSSProperties}
+              style={{ "--px-metal": metal(p.rank), "--delay": `${p.i * 0.25}s` } as CSSProperties}
             />
           </PixelSvg>
           <span className="mb-1 w-full truncate text-center text-sm font-medium">{p.name}</span>

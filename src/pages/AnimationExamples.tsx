@@ -1,6 +1,6 @@
 import { useState, type CSSProperties, type ReactNode } from "react"
 
-import { AppShell, Box, Loading, PageTitle, ResultTag, Tag } from "@/components/court/AppShell"
+import { AppShell, Box, PageTitle, ResultTag, Tag } from "@/components/court/AppShell"
 import { BallMark } from "@/components/court/BallMark"
 import {
   BallBoyRun,
@@ -128,14 +128,9 @@ function Lost() {
 function Loader() {
   return (
     <Example n={6} title="Chargement" where="Partout où la page charge (remplace « Chargement… »).">
-      <div className="grid grid-cols-2 gap-3">
-        <Box>
-          <PixelLoader />
-        </Box>
-        <Box className="opacity-70">
-          <Loading label="Avant" />
-        </Box>
-      </div>
+      <Box>
+        <PixelLoader />
+      </Box>
     </Example>
   )
 }

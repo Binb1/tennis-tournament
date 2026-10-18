@@ -4,7 +4,9 @@ import { ChevronRight } from "lucide-react"
 
 import { AppShell, Box, ErrorBox, Loading, PageTitle, ResultTag, Tag } from "@/components/court/AppShell"
 import { MiniCourt } from "@/components/court/SurfacePicker"
+import { BallConfetti } from "@/components/pixel/Animations"
 import { useAuth } from "@/lib/auth"
+import { Once } from "@/lib/seen"
 import { isThemeId, themeLabel } from "@/lib/theme"
 import {
   fetchLastPicks,
@@ -76,9 +78,10 @@ export default function Tournaments() {
 
   return (
     <AppShell>
-      <PageTitle eyebrow="Saison 2026">Tournois</PageTitle>
+      <PageTitle eyebrow={`Saison ${new Date().getFullYear()}`}>Tournois</PageTitle>
       {error && <ErrorBox message={error} onRetry={() => setReload((n) => n + 1)} />}
       {!rows && !error && <Loading />}
+      {rows && <ToDo rows={rows} mine={mine} openRound={openRound} lastPicks={lastPicks} now={now} />}
       {rows && rows.length === 0 && <p className="py-8 text-center text-chalk/85">Aucun tournoi pour l'instant.</p>}
       {rows &&
         groupTournaments(rows).map(({ title, list }) => {
@@ -105,6 +108,68 @@ export default function Tournaments() {
   )
 }
 
+/** Picks are open during registration (round 1 only) and live. */
+const pickable = (t: Tournament, round?: Round) => (round && (t.status === "live" || round.idx === 1) ? round : undefined)
+
+/**
+ * What needs doing now, soonest lock first: rounds I still have to pick for.
+ * With nothing to pick, the open tournaments I haven't joined.
+ */
+function ToDo({
+  rows,
+  mine,
+  openRound,
+  lastPicks,
+  now,
+}: {
+  rows: Row[]
+  mine: Record<string, EntryStatus>
+  openRound: Record<string, Round>
+  lastPicks: Record<string, LastPick>
+  now: number
+}) {
+  const picks = rows
+    .flatMap((t) => {
+      const me = mine[t.id]
+      const round = pickable(t, openRound[t.id])
+      if (!me?.alive || !round || lastPicks[me.entry_id]?.picked.includes(round.id)) return []
+      const ms = new Date(round.locks_at).getTime() - now
+      return ms > 0 ? [{ t, round, ms }] : []
+    })
+    .sort((a, b) => a.ms - b.ms)
+  const joinable = picks.length ? [] : rows.filter((t) => t.status === "registration" && hasDraw(t) && !mine[t.id])
+  if (!picks.length && !joinable.length) return null
+
+  return (
+    <section className="mb-8 border-l-4 border-ball bg-ink/70">
+      <h2 className="micro-label px-4 pt-3">{picks.length ? "À faire" : "Inscriptions ouvertes"}</h2>
+      <ul>
+        {picks.map(({ t, round, ms }) => (
+          <li key={t.id}>
+            <Link to={`/tournois/${t.id}`} className="flex min-h-11 items-center gap-3 px-4 py-2.5 hover:bg-chalk/10">
+              <span className="min-w-0 flex-1">
+                <span className="block font-bold">Choisis ton joueur · {round.name}</span>
+                <span className="block text-sm">
+                  {t.name} · verrouillage dans <span className="tabular-nums">{formatLeft(ms, false)}</span>
+                </span>
+              </span>
+              <ChevronRight className="size-5 shrink-0" />
+            </Link>
+          </li>
+        ))}
+        {joinable.map((t) => (
+          <li key={t.id}>
+            <Link to={`/tournois/${t.id}`} className="flex min-h-11 items-center gap-3 px-4 py-2.5 hover:bg-chalk/10">
+              <span className="min-w-0 flex-1 font-bold">Rejoindre {t.name}</span>
+              <ChevronRight className="size-5 shrink-0" />
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
 function TournamentCard({
   t,
   me,
@@ -121,8 +186,7 @@ function TournamentCard({
   now: number
 }) {
   const count = t.entries[0]?.count ?? 0
-  // Picks are open during registration (round 1 only) and live.
-  const open = round && (t.status === "live" || round.idx === 1) ? round : undefined
+  const open = pickable(t, round)
   const ms = open ? new Date(open.locks_at).getTime() - now : 0
   return (
     <Link to={`/tournois/${t.id}`} className="block">
@@ -152,7 +216,7 @@ function TournamentCard({
           {!me && t.status === "live" && t.late_join && open && ms > 0 && (
             <p className="mt-1 text-sm">Inscriptions encore ouvertes</p>
           )}
-          {me && <MyPickLine me={me} last={last} open={open && ms > 0 ? open : undefined} />}
+          {me && <MyPickLine me={me} last={last} open={open && ms > 0 ? open : undefined} live={t.status === "live"} />}
         </div>
         <ChevronRight className="size-5 shrink-0 text-chalk/80" />
       </Box>
@@ -164,7 +228,7 @@ function TournamentCard({
  * My pick on a card: the open round's pick (or a "no pick yet" alert), else my latest pick.
  * When I'm out without a pick in the fatal round, say so.
  */
-export function MyPickLine({ me, last, open }: { me: EntryStatus; last?: LastPick; open?: Round }) {
+export function MyPickLine({ me, last, open, live = false }: { me: EntryStatus; last?: LastPick; open?: Round; live?: boolean }) {
   if (me.alive && open && !last?.picked.includes(open.id)) {
     return (
       <p role="status" className="mt-3 border-l-4 border-ball bg-ink/70 px-3 py-2 text-sm font-medium">
@@ -185,7 +249,15 @@ export function MyPickLine({ me, last, open }: { me: EntryStatus; last?: LastPic
     <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 border-l-4 border-chalk bg-brick/40 px-3 py-2 text-sm">
       <span className="text-chalk/90">Ton choix · {last.roundName} :</span>
       <strong className="font-bold">{last.player}</strong>
-      <ResultTag result={last.result} />
+      <span className="relative inline-flex">
+        <ResultTag result={last.result} />
+        {/* A live win, first time it shows on this device. */}
+        {live && last.result === "won" && (
+          <Once id={`won:card:${me.entry_id}:${last.roundId}`}>
+            <BallConfetti className="absolute -top-8 left-1/2 w-24 -translate-x-1/2" />
+          </Once>
+        )}
+      </span>
     </p>
   )
 }
