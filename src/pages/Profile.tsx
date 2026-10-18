@@ -15,7 +15,7 @@ import {
   type Tournament,
 } from "@/lib/supabase"
 import { MyState } from "@/pages/Tournaments"
-import { POINTS_PER_ROUND, POINTS_PER_WIN, fetchSeasons, rankSeason, seasonsOf, type EntryPoints, type Ranked } from "@/lib/season"
+import { fetchSeasons, rankSeason, seasonsOf, type EntryPoints, type Ranked } from "@/lib/season"
 import { HandleField, SocialLinks, parseSocials } from "@/components/court/Socials"
 
 /** Public X / Instagram handles: shown as links, editable in place. */
@@ -261,13 +261,11 @@ function MySeasons({ mine, players }: { mine: Ranked[]; players: Record<number, 
   const [cur, ...past] = mine
   const tiles = [
     { label: "Classement", value: `${cur.rank}${cur.rank === 1 ? "er" : "e"}`, sub: `sur ${players[cur.season]}${cur.tied ? " · ex æquo" : ""}` },
-    { label: "Points", value: cur.points, sub: `${cur.tournaments_played} ${cur.tournaments_played > 1 ? "tournois joués" : "tournoi joué"}` },
-    { label: "Tours gagnés", value: cur.rounds_won, sub: `+${cur.rounds_won * POINTS_PER_ROUND} pts · ${POINTS_PER_ROUND} par tour` },
-    {
-      label: "Tournois gagnés",
-      value: cur.tournaments_won,
-      sub: cur.tournaments_won > 0 ? `+${cur.tournaments_won * POINTS_PER_WIN} pts` : `+${POINTS_PER_WIN} pts par tournoi`,
-    },
+    { label: "Points", value: cur.points, sub: `dont ${cur.winner_bonus + cur.champion_bonus} de bonus` },
+    { label: "Tournois joués", value: cur.tournaments_played, sub: "tous comptent" },
+    { label: "Tours gagnés", value: cur.rounds_won, sub: `+${cur.round_points} pts` },
+    { label: "Tournois gagnés", value: cur.tournaments_won, sub: cur.tournaments_won > 0 ? `+${cur.winner_bonus} pts` : "dernier debout" },
+    { label: "Vainqueurs devinés", value: cur.champions_predicted, sub: cur.champions_predicted > 0 ? `+${cur.champion_bonus} pts` : "pronostic du titre" },
   ]
   return (
     <section className="mb-10">

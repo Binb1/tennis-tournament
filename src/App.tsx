@@ -7,6 +7,7 @@ import AnimationExamples from "@/pages/AnimationExamples"
 import Landing from "@/pages/Landing"
 import Login from "@/pages/Login"
 import NewPassword from "@/pages/NewPassword"
+import Points from "@/pages/Points"
 import Profile from "@/pages/Profile"
 import Rules from "@/pages/Rules"
 import Season from "@/pages/Season"
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="/tournois" element={<Protected><Tournaments /></Protected>} />
         <Route path="/tournois/:id" element={<Protected><TournamentPage /></Protected>} />
         <Route path="/regles" element={<Rules />} />
+        <Route path="/points" element={<Points />} />
         <Route path="/saison" element={<Protected><Season /></Protected>} />
         <Route path="/profil" element={<Protected><Profile /></Protected>} />
         <Route path="/admin" element={<Protected admin><AdminHome /></Protected>} />

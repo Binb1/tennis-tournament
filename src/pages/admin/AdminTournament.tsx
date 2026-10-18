@@ -3,10 +3,11 @@ import { Link, useParams } from "react-router-dom"
 import { ArrowLeft } from "lucide-react"
 
 import { AppShell, Box, ChalkButton, ErrorBox, LineButton, Loading, PageTitle, Tag } from "@/components/court/AppShell"
+import type { Category } from "@/lib/scoring"
 import { suggestTheme, themeLabel, useThemeOverride } from "@/lib/theme"
 import { formatTime, useNow } from "@/lib/time"
 import { cn } from "@/lib/utils"
-import { logAdmin, selectClass, ThemeSelect } from "@/pages/admin/AdminHome"
+import { CategorySelect, logAdmin, selectClass, ThemeSelect } from "@/pages/admin/AdminHome"
 import {
   STATUS_LABEL,
   displayName,
@@ -107,6 +108,7 @@ function AdminTournamentView({ id }: { id: string }) {
           <div className="space-y-8">
             <StatusSection data={data} onChanged={reload} />
             <StyleSection data={data} onChanged={reload} />
+            <CategorySection data={data} onChanged={reload} />
             <CurrentRoundSection data={data} />
             <RoundsSection data={data} onChanged={reload} />
             <DrawSection data={data} onChanged={reload} />
@@ -245,6 +247,28 @@ function StyleSection({ data, onChanged }: Props) {
           </button>
         </p>
       )}
+      {error && <div className="mt-3"><ErrorBox message={error} /></div>}
+    </Section>
+  )
+}
+
+/* 1c. Catégorie ------------------------------------------------------ */
+
+function CategorySection({ data, onChanged }: Props) {
+  const { busy, error, run } = useWrite(onChanged)
+
+  function save(category: Category) {
+    return run("category", async () => {
+      const res = await supabase.from("tournaments").update({ category }).eq("id", data.t.id)
+      if (!res.error) await logAdmin("set_category", { tournament_id: data.t.id, from: data.t.category, to: category })
+      return res
+    })
+  }
+
+  return (
+    <Section title="Catégorie">
+      <CategorySelect bare value={data.t.category} onChange={save} disabled={!!busy} />
+      <p className="mt-2 text-sm text-chalk/85">Multiplie les points de saison de ce tournoi.</p>
       {error && <div className="mt-3"><ErrorBox message={error} /></div>}
     </Section>
   )

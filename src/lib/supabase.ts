@@ -1,5 +1,7 @@
 import { createClient } from "@supabase/supabase-js"
 
+import type { Category } from "@/lib/scoring"
+
 const url = import.meta.env.VITE_SUPABASE_URL || "https://placeholder.supabase.co"
 const key = import.meta.env.VITE_SUPABASE_ANON_KEY || "missing-key"
 
@@ -33,6 +35,8 @@ export type Tournament = {
   late_join: boolean
   /** Test tournament: only admins see it, no season points. Migration 0013. */
   test?: boolean
+  /** 250 / 500 / Masters 1000 / Grand Chelem: weighs its season points (lib/scoring.ts). Migration 0014. */
+  category: Category
 }
 
 /** Joining: during registration, or while live with late sign-ups on and a round still open. */
@@ -75,6 +79,8 @@ export type Match = {
 }
 export type PlayerResult = { player_id: string; round_id: string; result: "won" | "lost" | null }
 export type Pick = { entry_id: string; round_id: string; player_id: string }
+/** "Who wins the title?", open until round 1 locks (migration 0014). */
+export type ChampionPick = { entry_id: string; player_id: string }
 /** Admin "repêchage": a locked round without a pick that does not eliminate the entry. */
 export type Waiver = { entry_id: string; round_id: string }
 export type EntryStatus = {

@@ -4,7 +4,7 @@ import { Link } from "react-router-dom"
 import { AppShell, Box, ErrorBox, FindMe, Loading, ME_ROW, PageTitle, SearchInput } from "@/components/court/AppShell"
 import { ClimbArrow, PixelPodium } from "@/components/pixel/Animations"
 import { useAuth } from "@/lib/auth"
-import { POINTS_PER_ROUND, POINTS_PER_WIN, fetchSeasons, rankSeason, seasonsOf, type SeasonRow } from "@/lib/season"
+import { fetchSeasons, rankSeason, seasonsOf, type SeasonRow } from "@/lib/season"
 import { readSeen, writeSeen } from "@/lib/seen"
 import { displayName } from "@/lib/supabase"
 import { cn } from "@/lib/utils"
@@ -61,9 +61,9 @@ export default function Season() {
     <AppShell>
       <PageTitle eyebrow="Classement général">Saison {season}</PageTitle>
       <p className="-mt-2 mb-6 text-sm text-chalk/85">
-        {POINTS_PER_ROUND} pts par tour gagné · +{POINTS_PER_WIN} par tournoi remporté. Un tour passé sans choix (repêché par l'admin) ne rapporte rien.{" "}
-        <Link to="/regles" className="underline underline-offset-4">
-          Règles du jeu
+        Plus le tour est avancé et le tournoi prestigieux, plus il rapporte.{" "}
+        <Link to="/points" className="underline underline-offset-4">
+          Comment marquer des points
         </Link>
       </p>
 

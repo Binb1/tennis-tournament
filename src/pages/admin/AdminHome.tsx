@@ -4,6 +4,7 @@ import { ChevronRight } from "lucide-react"
 
 import { AppShell, Box, ChalkButton, ErrorBox, Field, Loading, PageTitle, Tag } from "@/components/court/AppShell"
 import { formatDate, groupTournaments, hasDraw, statusLabel, supabase, type WithDraw } from "@/lib/supabase"
+import { CATEGORIES, suggestCategory, type Category } from "@/lib/scoring"
 import { suggestTheme, THEME_GROUPS, THEMES } from "@/lib/theme"
 
 /** Early rounds are numbered from the start, the last 4 are always 8es → Finale (32 draw: 1er tour, 8es, …). */
@@ -37,6 +38,22 @@ export function ThemeSelect({ value, onChange, disabled, bare = false }: { value
   )
 }
 
+/** Tournament category: weighs its season points (×2 / ×3 / ×5 / ×8). */
+export function CategorySelect({ value, onChange, disabled, bare = false }: { value: Category; onChange: (v: Category) => void; disabled?: boolean; bare?: boolean }) {
+  return (
+    <label className="block">
+      <span className={bare ? "sr-only" : "micro-label mb-2"}>Catégorie</span>
+      <select className={selectClass} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value as Category)}>
+        {CATEGORIES.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.label} · points ×{c.mult}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
 /** Audit trail for direct table writes (the RPCs log themselves). */
 export async function logAdmin(action: string, payload: Record<string, unknown>) {
   const { data } = await supabase.auth.getSession()
@@ -57,6 +74,9 @@ export default function AdminHome() {
   // Style follows the name until the admin picks one.
   const [theme, setThemeChoice] = useState<string | null>(null)
   const style = theme ?? suggestTheme(name) ?? ""
+  // Category follows the style until the admin picks one.
+  const [categoryChoice, setCategory] = useState<Category | null>(null)
+  const category = categoryChoice ?? suggestCategory(style)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [resetting, setResetting] = useState(false)
@@ -87,7 +107,7 @@ export default function AdminHome() {
     const start = new Date(startsAt)
     const { data: t, error } = await supabase
       .from("tournaments")
-      .insert({ name: name.trim(), tour, draw_size: drawSize, starts_at: start.toISOString(), external_id: externalId.trim() || null, theme: style || null })
+      .insert({ name: name.trim(), tour, draw_size: drawSize, starts_at: start.toISOString(), external_id: externalId.trim() || null, theme: style || null, category })
       .select("id")
       .single()
     if (error) {
@@ -211,6 +231,7 @@ export default function AdminHome() {
               hint="Verrouillage du 1er tour ; les suivants tous les 2 jours (modifiable ensuite)."
             />
             <ThemeSelect value={style} onChange={setThemeChoice} />
+            <CategorySelect value={category} onChange={setCategory} />
             <Field label="ID Tennis API (ex. 21362 = Paris Masters)" value={externalId} onChange={(e) => setExternalId(e.target.value)} />
             {formError && <ErrorBox message={formError} />}
             <ChalkButton type="submit" disabled={saving} className="w-full">
