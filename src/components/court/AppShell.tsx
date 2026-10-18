@@ -115,6 +115,9 @@ export function SiteFooter({ className }: { className?: string }) {
         <Link to="/regles" className="inline-flex min-h-11 items-center text-xs font-medium text-chalk/80 underline underline-offset-4 hover:text-chalk">
           Règles du jeu
         </Link>
+        <Link to="/points" className="inline-flex min-h-11 items-center text-xs font-medium text-chalk/80 underline underline-offset-4 hover:text-chalk">
+          Points
+        </Link>
       </div>
     </footer>
   )

@@ -99,3 +99,29 @@ export const DIGITS: Record<string, string[]> = {
   "9": ["ccc", "c.c", "ccc", "..c", "ccc"],
   ":": [".", "c", ".", "c", "."],
 }
+
+/** Points page: the cup (metal follows --px-metal) and the "who wins?" ball. */
+export const TROPHY = [
+  "mmmmmmmmm",
+  "m.mmmmm.m",
+  "m.mmmmm.m",
+  ".mmmmmmm.",
+  "..mmmmm..",
+  "...mmm...",
+  "....m....",
+  "....m....",
+  "..mmmmm..",
+  "..kkkkk..",
+]
+
+export const QUESTION_BALL = [
+  "..bbbbb..",
+  ".bbkkkbb.",
+  "bbkbbbkbb",
+  "bbbbbbkbb",
+  "bbbbbkbbb",
+  "bbbbkbbbb",
+  "bbbbbbbbb",
+  ".bbbkbbb.",
+  "..bbbbb..",
+]

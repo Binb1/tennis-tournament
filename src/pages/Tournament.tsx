@@ -9,6 +9,7 @@ import { SocialIcons } from "@/components/court/Socials"
 import { BallBoyRun, PixelNetFault, PixelWin, ShotClock } from "@/components/pixel/Animations"
 import { useAuth } from "@/lib/auth"
 import { Once } from "@/lib/seen"
+import { bonusPoints, roundPoints } from "@/lib/scoring"
 import { useThemeOverride } from "@/lib/theme"
 import { formatLeft, useNow } from "@/lib/time"
 import { cn } from "@/lib/utils"
@@ -19,6 +20,7 @@ import {
   formatDate,
   statusLabel,
   supabase,
+  type ChampionPick,
   type EntryStatus,
   type Match,
   type Pick,
@@ -44,6 +46,7 @@ type Data = {
   picks: Pick[]
   waivers: Waiver[]
   matches: Match[]
+  champions: ChampionPick[]
 }
 type ChipState = "won" | "lost" | "pending" | "missing" | "waived" | "open"
 type TrailStep = { round: Round; state: ChipState; player?: Player }
@@ -56,7 +59,7 @@ async function load(id: string): Promise<Data> {
   if (r.error) throw new Error(r.error.message)
   const rounds = r.data as Round[]
   const roundIds = rounds.map((x) => x.id)
-  const [players, results, entries, statuses, picks, waivers, matches] = await Promise.all([
+  const [players, results, entries, statuses, picks, waivers, matches, champions] = await Promise.all([
     fetchAll<Player>((a, b) => supabase.from("players").select("id, name, seed, country, ranking").eq("tournament_id", id).order("name").range(a, b)),
     fetchAll<PlayerResult>((a, b) =>
       supabase.from("player_results").select("player_id, round_id, result").in("round_id", roundIds).order("player_id").order("round_id").range(a, b),
@@ -70,8 +73,11 @@ async function load(id: string): Promise<Data> {
     ),
     fetchAll<Waiver>((a, b) => supabase.from("pick_waivers").select("entry_id, round_id").in("round_id", roundIds).order("entry_id").order("round_id").range(a, b)),
     fetchAll<Match>((a, b) => supabase.from("matches").select("*").eq("tournament_id", id).order("id").range(a, b)),
+    fetchAll<ChampionPick>((a, b) =>
+      supabase.from("champion_picks").select("entry_id, player_id, entries!inner(tournament_id)").eq("entries.tournament_id", id).order("entry_id").range(a, b),
+    ),
   ])
-  return { t: t as Tournament, rounds, players, results, entries, statuses, picks, waivers, matches }
+  return { t: t as Tournament, rounds, players, results, entries, statuses, picks, waivers, matches, champions }
 }
 
 /** Keyed by id: going from one tournament to another (back/forward) starts from a clean state. */
@@ -286,6 +292,19 @@ function derive(data: Data, uid: string | undefined, now: number) {
     }
   }
   const lastIdx = Math.max(0, ...data.rounds.map((r) => r.idx))
+  /** Season points for winning a round (lib/scoring.ts). */
+  const pointsOf = (r: Round) => roundPoints(data.t.category, r.idx, lastIdx)
+
+  // Champion prediction: open until round 1 locks; the title goes to the winner of the last round.
+  const firstRound = roundByIdx.get(1)
+  const championOpen =
+    (data.t.status === "registration" || data.t.status === "live") && !!firstRound && !locked(firstRound)
+  const finalRound = roundByIdx.get(lastIdx)
+  const champion = finalRound ? data.results.find((r) => r.round_id === finalRound.id && r.result === "won")?.player_id : undefined
+  const championOf = new Map(data.champions.map((c) => [c.entry_id, c.player_id]))
+  /** Result of a prediction: right once the final is won, wrong as soon as the player loses. */
+  const championResult = (pid: string): "won" | "lost" | undefined =>
+    champion ? (champion === pid ? "won" : "lost") : lostRound.has(pid) ? "lost" : undefined
   /** Round idx in which two players would face each other, or null when unknown. */
   const meetRound = (a: string, b: string) => {
     const sa = slotOf.get(a)
@@ -309,7 +328,7 @@ function derive(data: Data, uid: string | undefined, now: number) {
     }
   }
 
-  return { result, playerById, picksByEntry, livePicks, meetRound, myPath, roundByIdx, statusByEntry, lostRound, pickResult, currentRound, locked, noPick, trail, myEntry, myStatus, myPicks, matchOf }
+  return { result, playerById, picksByEntry, livePicks, meetRound, myPath, roundByIdx, statusByEntry, lostRound, pickResult, currentRound, locked, noPick, trail, myEntry, myStatus, myPicks, matchOf, pointsOf, championOpen, championOf, championResult }
 }
 type Derived = ReturnType<typeof derive>
 
@@ -439,7 +458,7 @@ function MyPick({ data, d, onChanged, onPlan }: { data: Data; d: Derived; onChan
 
   return (
     <div className="space-y-6">
-      {alive && round && <LockBlock round={round} planned={!isCurrent} />}
+      {alive && round && <LockBlock round={round} planned={!isCurrent} points={d.pointsOf(round)} />}
 
       {alive && stale.length > 0 && (
         <div role="alert" className="border-l-4 border-ball bg-ink/70 px-4 py-3 text-sm font-medium">
@@ -447,6 +466,8 @@ function MyPick({ data, d, onChanged, onPlan }: { data: Data; d: Derived; onChan
           es éliminé.
         </div>
       )}
+
+      <ChampionCard data={data} d={d} onChanged={onChanged} />
 
       {statusRound && statusPid && <ResultMoment id={`${d.myEntry.id}:${statusRound.id}`} result={d.pickResult(statusPid, statusRound)} />}
 
@@ -536,6 +557,111 @@ function ResultMoment({ id, result }: { id: string; result: "won" | "lost" | und
         {result === "won" ? <PixelWin /> : <PixelNetFault />}
       </Box>
     </Once>
+  )
+}
+
+/**
+ * "Qui gagne le titre ?": one player, changeable until round 1 locks, scored even after elimination
+ * (migration 0014). Others' predictions show once round 1 locks (in the leaderboard).
+ */
+function ChampionCard({ data, d, onChanged }: { data: Data; d: Derived; onChanged: () => Promise<void> }) {
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState("")
+  const [saving, setSaving] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const pid = d.myEntry ? d.championOf.get(d.myEntry.id) : undefined
+  const bonus = bonusPoints(data.t.category)
+  const editable = d.championOpen && data.players.length > 0
+  if (!pid && !editable) return null
+
+  async function save(playerId: string | null) {
+    setSaving(playerId ?? "clear")
+    setError(null)
+    const { error } = await supabase.rpc("set_champion_pick", { p_tournament_id: data.t.id, p_player_id: playerId })
+    if (error) setError(error.message)
+    else {
+      await onChanged()
+      setOpen(false)
+    }
+    setSaving(null)
+  }
+
+  const needle = q.trim().toLowerCase()
+  const list = data.players
+    .filter((p) => !d.lostRound.has(p.id) && (!needle || p.name.toLowerCase().includes(needle)))
+    .sort((a, b) => (a.seed ?? 999) - (b.seed ?? 999) || a.name.localeCompare(b.name))
+
+  return (
+    <section className="space-y-3">
+      <Box className="px-4 py-4">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="micro-label">Pronostic du vainqueur</span>
+          <span className="text-sm font-bold tabular-nums">+{bonus} pts</span>
+        </div>
+        {pid ? (
+          <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <strong className="font-display text-2xl leading-tight">
+              <PlayerName p={d.playerById.get(pid)} />
+            </strong>
+            {!editable && <ResultTag result={d.championResult(pid)} />}
+          </div>
+        ) : (
+          <p className="mt-2 font-display text-2xl leading-tight">Qui gagne le titre ?</p>
+        )}
+        <p className="mt-1 text-sm text-chalk/85">
+          {editable
+            ? "Modifiable jusqu'au verrouillage du 1er tour. Compte même si tu es éliminé."
+            : "Compte même si tu es éliminé."}
+        </p>
+        {editable && (
+          <div className="mt-3 flex flex-wrap items-center gap-4">
+            <LineButton onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+              {open ? "Fermer" : pid ? "Changer" : "Choisir le vainqueur"}
+            </LineButton>
+            {pid && (
+              <button
+                onClick={() => save(null)}
+                disabled={!!saving}
+                className="min-h-11 text-xs font-medium text-chalk/90 underline underline-offset-2 hover:text-chalk"
+              >
+                {saving === "clear" ? "…" : "Retirer"}
+              </button>
+            )}
+          </div>
+        )}
+      </Box>
+      {error && <ErrorBox message={error} />}
+      {open && editable && (
+        <>
+          <SearchInput value={q} onChange={setQ} placeholder="Chercher un joueur" />
+          <ul className="max-h-[50svh] overflow-y-auto border-2 border-chalk/90">
+            {list.map((p) => {
+              const selected = p.id === pid
+              return (
+                <li key={p.id} className="border-t-2 border-chalk/50 first:border-t-0">
+                  <button
+                    disabled={!!saving}
+                    onClick={() => save(p.id)}
+                    aria-pressed={selected}
+                    className={cn(
+                      "flex min-h-12 w-full items-center gap-3 px-3 py-2.5 text-left transition-colors",
+                      selected ? "bg-chalk text-clay" : "hover:bg-chalk/10",
+                    )}
+                  >
+                    <span className={cn("w-7 shrink-0 text-xs font-bold tabular-nums", !selected && "opacity-70")}>
+                      {p.seed ? `[${p.seed}]` : ""}
+                    </span>
+                    <PlayerName p={p} className={cn("min-w-0 flex-1", selected ? "font-bold" : "font-medium")} />
+                    {saving === p.id && <span className="shrink-0 text-xs">…</span>}
+                  </button>
+                </li>
+              )
+            })}
+            {list.length === 0 && <li className="px-3 py-4 text-sm text-chalk/80">Aucun joueur.</li>}
+          </ul>
+        </>
+      )}
+    </section>
   )
 }
 
@@ -640,7 +766,9 @@ function PlayerPicker({
     <section className="space-y-3">
       {error && <ErrorBox message={error} />}
       <div className="flex items-end justify-between gap-3">
-        <h2 className="micro-label">Joueurs du tableau · {round.name}</h2>
+        <h2 className="micro-label">
+          Joueurs du tableau · {round.name} · +{d.pointsOf(round)} pts
+        </h2>
         {pickedId ? (
           <button
             onClick={() => save("clear_pick", "clear", { p_round_id: round.id })}
@@ -860,7 +988,7 @@ function MyBracket({ data, d, round, boxClassName }: { data: Data; d: Derived; r
 
 /** Big lock countdown: minutes when far, live seconds under 1 h, plus the local lock time. A later round's lock
  *  follows the order of play, so it is only an estimate until then. */
-function LockBlock({ round, planned = false }: { round: Round; planned?: boolean }) {
+function LockBlock({ round, planned = false, points }: { round: Round; planned?: boolean; points?: number }) {
   const now = useNow(1000)
   const ms = new Date(round.locks_at).getTime() - now
   // Last hour of the round to play: shot clock (blinks under 10 min) and a ball boy running along the box.
@@ -876,6 +1004,7 @@ function LockBlock({ round, planned = false }: { round: Round; planned?: boolean
       <p className="mt-1 text-sm text-chalk/85">
         Heure locale : {formatDate(round.locks_at, true)}
         {planned && " · suit le programme, peut avancer"}
+        {points != null && ` · tour gagné : +${points} pts`}
       </p>
       {hurry && <BallBoyRun className="mt-1" />}
     </Box>
@@ -1037,6 +1166,15 @@ function Leaderboard({ data, d, uid }: { data: Data; d: Derived; uid?: string })
                       <Chip key={s.round.id} step={s} withPlayer={on} />
                     ))}
                   </div>
+                )}
+                {on && d.championOf.has(r.e.id) && (
+                  <p className="mt-2 flex flex-wrap items-center gap-x-2 pl-9 text-xs">
+                    <span className="text-chalk/85">Pronostic du vainqueur :</span>
+                    <span className="font-bold">
+                      <PlayerName p={d.playerById.get(d.championOf.get(r.e.id)!)} />
+                    </span>
+                    {!d.championOpen && <ResultTag result={d.championResult(d.championOf.get(r.e.id)!)} />}
+                  </p>
                 )}
               </div>
             </li>

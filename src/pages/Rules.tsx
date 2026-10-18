@@ -3,7 +3,6 @@ import { Link } from "react-router-dom"
 
 import { AppShell, Box, PageTitle } from "@/components/court/AppShell"
 import { useAuth } from "@/lib/auth"
-import { POINTS_PER_ROUND, POINTS_PER_WIN } from "@/lib/season"
 
 /** How the game works, in one page. Public: linked from the footer, the landing included. */
 export default function Rules() {
@@ -47,6 +46,11 @@ export default function Rules() {
           <li>Si tous les derniers survivants tombent au même tour, ils sont co-vainqueurs.</li>
         </Rule>
 
+        <Rule title="Pronostic du vainqueur">
+          <li>Avant le verrouillage du 1er tour, devine qui remportera le titre.</li>
+          <li>Il compte même si tu es éliminé du jeu entre-temps.</li>
+        </Rule>
+
         <Rule title="Repêchage">
           <li>
             Un tour « repêché » est un tour passé sans choix qui ne t'élimine pas : tu as rejoint le tournoi en cours, ou
@@ -57,9 +61,14 @@ export default function Rules() {
 
         <Rule title="Classement de la saison">
           <li>
-            {POINTS_PER_ROUND} points par tour gagné, +{POINTS_PER_WIN} par tournoi remporté.
+            Chaque tour gagné rapporte des points, de plus en plus jusqu'à la finale, multipliés selon le tournoi (250, 500,
+            Masters 1000, Grand Chelem). Bonus pour le dernier debout et pour le bon pronostic du vainqueur.{" "}
+            <Link to="/points" className="underline underline-offset-4">
+              Le barème en images
+            </Link>
           </li>
-          <li>À égalité de points : le plus de tournois gagnés, puis le plus de tours gagnés.</li>
+          <li>Tous les tournois comptent, même ceux qui se jouent la même semaine.</li>
+          <li>À égalité de points : le plus de tournois joués, puis gagnés, puis le plus de tours gagnés.</li>
           <li>Une saison = les tournois qui commencent dans l'année.</li>
         </Rule>
       </div>
