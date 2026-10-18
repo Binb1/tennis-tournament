@@ -53,7 +53,7 @@ export default function Tournaments() {
         const [w, r, p] = await Promise.all([
           fetchWinners(mine.filter((s) => finished.has(s.tournament_id)).map((s) => s.tournament_id)),
           supabase.from("rounds").select("*").in("tournament_id", playing).gt("locks_at", new Date().toISOString()).order("idx"),
-          fetchLastPicks(mine.map((s) => s.entry_id)),
+          fetchLastPicks(mine),
         ])
         if (r.error) throw new Error(r.error.message)
         if (!active) return
@@ -165,7 +165,7 @@ function TournamentCard({
  * When I'm out without a pick in the fatal round, say so.
  */
 export function MyPickLine({ me, last, open }: { me: EntryStatus; last?: LastPick; open?: Round }) {
-  if (me.alive && open && last?.roundId !== open.id) {
+  if (me.alive && open && !last?.picked.includes(open.id)) {
     return (
       <p role="status" className="mt-3 border-l-4 border-ball bg-ink/70 px-3 py-2 text-sm font-medium">
         Pas encore de choix · {open.name}

@@ -145,18 +145,41 @@ export async function fetchWinners(tournamentIds: string[]): Promise<Set<string>
   return winners
 }
 
-export type LastPick = { roundId: string; roundIdx: number; roundName: string; player: string; result: "won" | "lost" | null }
+export type LastPick = {
+  roundId: string
+  roundIdx: number
+  roundName: string
+  player: string
+  result: "won" | "lost" | null
+  /** Every round with a pick, queued ones included. */
+  picked: string[]
+}
 
-/** Latest pick (highest round) of each entry, with the player's result in that round. Keyed by entry id. */
-export async function fetchLastPicks(entryIds: string[]): Promise<Record<string, LastPick>> {
-  if (!entryIds.length) return {}
-  type Row = Pick & { players: { name: string } | null; rounds: { idx: number; name: string } | null }
-  const p = await supabase.from("picks").select("entry_id, round_id, player_id, players(name), rounds(idx, name)").in("entry_id", entryIds)
+/**
+ * Latest pick of each entry, with the player's result in that round: the highest locked round (the result that
+ * counts), else the next open round with a pick (queued picks for later rounds don't count). Picks queued after the
+ * round an entry was eliminated in are ignored. Keyed by entry id.
+ */
+export async function fetchLastPicks(entries: EntryStatus[]): Promise<Record<string, LastPick>> {
+  if (!entries.length) return {}
+  const outAt = new Map(entries.map((e) => [e.entry_id, e.eliminated_round ?? Infinity]))
+  type Row = Pick & { players: { name: string } | null; rounds: { idx: number; name: string; locks_at: string } | null }
+  const p = await supabase
+    .from("picks")
+    .select("entry_id, round_id, player_id, players(name), rounds(idx, name, locks_at)")
+    .in("entry_id", [...outAt.keys()])
   if (p.error) throw new Error(p.error.message)
+  const now = Date.now()
+  const locked = (x: Row) => !!x.rounds && Date.parse(x.rounds.locks_at) <= now
+  const idx = (x: Row) => x.rounds?.idx ?? 0
+  const better = (a: Row, b: Row) => (locked(a) !== locked(b) ? locked(a) : locked(a) ? idx(a) > idx(b) : idx(a) < idx(b))
   const last: Record<string, Row> = {}
+  const picked: Record<string, string[]> = {}
   for (const row of p.data as unknown as Row[]) {
+    if (idx(row) > outAt.get(row.entry_id)!) continue
+    ;(picked[row.entry_id] ??= []).push(row.round_id)
     const cur = last[row.entry_id]
-    if (!cur || (row.rounds?.idx ?? 0) > (cur.rounds?.idx ?? 0)) last[row.entry_id] = row
+    if (!cur || better(row, cur)) last[row.entry_id] = row
   }
   const rows = Object.values(last)
   if (!rows.length) return {}
@@ -176,6 +199,7 @@ export async function fetchLastPicks(entryIds: string[]): Promise<Record<string,
         roundName: x.rounds?.name ?? "",
         player: x.players?.name ?? "?",
         result: result.get(`${x.player_id}:${x.round_id}`) ?? null,
+        picked: picked[x.entry_id],
       },
     ]),
   )

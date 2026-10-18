@@ -132,7 +132,7 @@ export default function Profile() {
       const rows = e.data as unknown as Row[]
       const finished = rows.filter((r) => r.tournaments?.status === "finished").map((r) => r.tournaments!.id)
       try {
-        const [w, p] = await Promise.all([fetchWinners(finished), fetchLastPicks(rows.map((r) => r.id))])
+        const [w, p] = await Promise.all([fetchWinners(finished), fetchLastPicks(s.data as EntryStatus[])])
         setWinners(w)
         setLastPicks(p)
       } catch (err) {
