@@ -6,8 +6,9 @@ import { supabase } from "@/lib/supabase"
 /**
  * Court surface theme. The palette, fonts and textures live in index.css under
  * `html[data-theme=…]`; this module only stores the choice and sets the attribute.
- * Default (no choice saved): the live tournament's style, else clay.
- * index.html applies the stored theme before first paint (same keys, same logic).
+ * The player picks "dynamic" (default) or one of the four Slams. Dynamic: the Masters 1000 being played (a live
+ * tournament with a Masters style), else the next Grand Slam on the calendar. A tournament page paints its own style.
+ * index.html applies the same choice before first paint (same keys, same logic).
  */
 
 export type ThemeId =
@@ -98,28 +99,59 @@ export function suggestTheme(name: string): ThemeId | null {
 
 export const themeLabel = (id: ThemeId) => THEMES.find((x) => x.id === id)!.label
 
+/** The Slams in calendar order, with the day after each one ends (month 1-12, day): the next Slam is the first not over. */
+export const SLAMS: { id: ThemeId; until: [number, number] }[] = [
+  { id: "ao", until: [2, 3] },
+  { id: "clay", until: [6, 10] },
+  { id: "wimbledon", until: [7, 16] },
+  { id: "usopen", until: [9, 12] },
+]
+const isSlam = (t: unknown): t is ThemeId => SLAMS.some((x) => x.id === t)
+
+/** The Slam being played or coming next. */
+export function nextSlam(now = new Date()): ThemeId {
+  const md = [now.getMonth() + 1, now.getDate()]
+  return (SLAMS.find(({ until: [m, d] }) => md[0] < m || (md[0] === m && md[1] < d)) ?? SLAMS[0]).id
+}
+
+export type ThemeChoice = ThemeId | "dynamic"
+
 const KEY = "tiebreakers-theme"
-/** Last known live tournament style, cached so the next visit paints it before the fetch. */
+/** Last dynamic style (live Masters 1000 or next Slam), cached so the next visit paints it before the fetch. */
 const LIVE_KEY = "tiebreakers-live-theme"
 const listeners = new Set<() => void>()
 let live: ThemeId | null = null
 let overridden = false // a tournament page is painting its own style
 
-function stored(key: string): ThemeId | null {
+/** The player's choice: a Slam, else dynamic (an old saved Masters style counts as dynamic). */
+function choice(): ThemeChoice {
   try {
-    const t = localStorage.getItem(key)
+    const t = localStorage.getItem(KEY)
+    if (isSlam(t)) return t
+  } catch {
+    /* storage unavailable */
+  }
+  return "dynamic"
+}
+
+/** The dynamic style: the live Masters 1000's, else the next Slam's (cached until the fetch answers). */
+export function dynamicTheme(): ThemeId {
+  if (live) return live
+  try {
+    const t = localStorage.getItem(LIVE_KEY)
     if (isThemeId(t)) return t
   } catch {
     /* storage unavailable */
   }
-  return null
+  return nextSlam()
 }
 
 export function getTheme(): ThemeId {
-  return stored(KEY) ?? live ?? stored(LIVE_KEY) ?? "clay"
+  const c = choice()
+  return c === "dynamic" ? dynamicTheme() : c
 }
 
-/** Fetch the live tournament's style (latest start wins) and paint it when the player has no saved choice. */
+/** Fetch the live Masters 1000 style (latest start wins) and paint the dynamic style when the player is on it. */
 export async function loadLiveTheme() {
   const { data, error } = await supabase
     .from("tournaments")
@@ -128,18 +160,17 @@ export async function loadLiveTheme() {
     .eq("test", false)
     .not("theme", "is", null)
     .order("starts_at", { ascending: false })
-    .limit(1)
   if (error) return
-  const t = data[0]?.theme
-  live = isThemeId(t) ? t : "clay"
+  const masters = data.map((r) => r.theme).find((t) => THEMES.some((x) => x.id === t && x.group === "masters"))
+  live = isThemeId(masters) ? masters : nextSlam()
   try {
-    if (isThemeId(t)) localStorage.setItem(LIVE_KEY, t)
-    else localStorage.removeItem(LIVE_KEY)
+    localStorage.setItem(LIVE_KEY, live)
   } catch {
     /* storage unavailable */
   }
   // A tournament page's own style stays on until it unmounts (it repaints getTheme() then).
-  if (!stored(KEY) && !overridden) apply(live)
+  if (choice() === "dynamic" && !overridden) apply(live)
+  else listeners.forEach((l) => l())
 }
 
 /** Paint a theme without saving it. */
@@ -151,14 +182,15 @@ function apply(id: ThemeId) {
   listeners.forEach((l) => l())
 }
 
-/** The player's choice: painted and saved. */
-export function setTheme(id: ThemeId) {
+/** The player's choice: saved and painted. */
+export function setTheme(c: ThemeChoice) {
   try {
-    localStorage.setItem(KEY, id)
+    if (c === "dynamic") localStorage.removeItem(KEY)
+    else localStorage.setItem(KEY, c)
   } catch {
     /* storage unavailable */
   }
-  apply(id)
+  apply(getTheme())
 }
 
 /**
@@ -175,6 +207,17 @@ export function useThemeOverride(id: string | null | undefined) {
       apply(getTheme())
     }
   }, [id])
+}
+
+/** The player's choice ("dynamic" or a Slam), for the picker. */
+export function useThemeChoice(): ThemeChoice {
+  return useSyncExternalStore(
+    (l) => {
+      listeners.add(l)
+      return () => listeners.delete(l)
+    },
+    choice,
+  )
 }
 
 /** Current theme, kept in sync across every picker on the page. */
