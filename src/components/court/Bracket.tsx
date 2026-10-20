@@ -13,8 +13,8 @@ const nextPow2 = (n: number) => 2 ** Math.ceil(Math.log2(Math.max(1, n)))
  * Slot p of round k+1 is fed by slots 2p-1 and 2p of round k; a missing match is an empty slot
  * (its players are the winners of the two feeding matches, when known).
  * `projected` fills the bracket with my picks: a player picked for round k must win every match up to k, so he is
- * drawn as the winner of those slots, and fills the empty slots after them ("prévu", in italics). His opponent there
- * is struck through: in my path, he loses.
+ * drawn as the winner of those slots, and fills the empty slots after them. Only real results are styled as results
+ * (bold winner, dimmed loser, check); a prediction is only the yellow mark, so the two never look alike.
  * `before`: the round just before the first column (when the bracket starts later), to fill that column's players.
  */
 export function Bracket({
@@ -66,11 +66,9 @@ export function Bracket({
           prev ? prev[i] : before ? { m: byRound.get(before.id)?.get(i + 1), ahead: projected?.get(`${before.id}:${i + 1}`) } : undefined
         const fed = (i: number) => {
           const f = feeder(i)
-          const real = f?.m?.winner_id
-          return real ? { id: real, guess: false } : f?.ahead ? { id: f.ahead, guess: true } : { id: null, guess: false }
+          return f?.m?.winner_id ?? f?.ahead ?? null
         }
-        const [a, b] = [fed(2 * p - 2), fed(2 * p - 1)]
-        out.push({ p1: a.id, p2: b.id, ahead, guess: new Set([a, b].filter((x) => x.guess).map((x) => x.id!)) })
+        out.push({ p1: fed(2 * p - 2), p2: fed(2 * p - 1), ahead })
       }
     }
     slotsByCol.push(out)
@@ -112,29 +110,24 @@ type Slot = {
   m?: Match
   /** My predicted winner of this slot. */
   ahead?: string
-  /** Players placed here by my predictions, not by a real result. */
-  guess?: Set<string>
 }
 
 function MatchBox({ s, playerById, pick }: { s: Slot; playerById: Map<string, Player>; pick?: string }) {
   const m = s.m
   const done = m?.status === "done" && !!m.winner_id
-  // My predicted winner, when he is in this match and it isn't played yet: he goes through, the other one is out.
+  // My predicted winner, when he is in this match and it isn't played yet.
   const aheadHere = !done && !!s.ahead && (s.p1 === s.ahead || s.p2 === s.ahead)
   const row = (pid: string | null) => {
     const p = pid ? playerById.get(pid) : undefined
     const won = done && pid === m!.winner_id
     const lost = done && !!pid && !won
     const goesOn = aheadHere && pid === s.ahead
-    const out = aheadHere && !!pid && pid !== s.ahead
     return (
       <div
         className={cn(
           "flex h-6 items-center gap-1.5 px-1.5 text-[12px]",
-          (won || goesOn) && "font-bold",
-          (lost || out) && "text-chalk/45",
-          out && "line-through decoration-chalk/60",
-          pid && s.guess?.has(pid) && "italic",
+          won && "font-bold",
+          lost && "text-chalk/45",
           pid && (pid === pick || pid === s.ahead) && "bg-chalk/20 shadow-[inset_3px_0_0_var(--color-ball)]",
           lost && pid === s.ahead && "line-through",
         )}
@@ -148,7 +141,7 @@ function MatchBox({ s, playerById, pick }: { s: Slot; playerById: Map<string, Pl
             {goesOn && <ChevronRight aria-label={t("bracket.throughPlanned")} className="size-3.5 shrink-0 text-ball" />}
           </>
         ) : (
-          <span className="text-chalk/50">{m ? t("bracket.tbd") : "–"}</span>
+          <span className="text-chalk/50">{t("bracket.tbd")}</span>
         )}
       </div>
     )
