@@ -324,7 +324,7 @@ export function MyPickLine({ me, last, open, live = false }: { me: EntryStatus; 
   )
 }
 
-/** `winner`: see fetchWinners (co-winners when nobody is alive at the end). */
+/** `winner`: see fetchWinners (alive after the final). */
 export function MyState({ status, me, winner }: { status: Tournament["status"]; me: EntryStatus; winner: boolean }) {
   if (status === "registration") return <Tag tone="alive">{t("tournaments.stateJoined")}</Tag>
   if (status === "finished" && winner) return <Tag tone="win">{t("tournaments.stateWinner")}</Tag>
