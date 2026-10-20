@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom"
 
 import { AuthProvider, Protected } from "@/lib/auth"
+import { useLang } from "@/lib/i18n"
 import AdminHome from "@/pages/admin/AdminHome"
 import AdminTournament from "@/pages/admin/AdminTournament"
 import AnimationExamples from "@/pages/AnimationExamples"
@@ -16,9 +17,11 @@ import Tournaments from "@/pages/Tournaments"
 import Welcome from "@/pages/Welcome"
 
 export default function App() {
+  // A language change remounts the pages, so every t() call (components and lib helpers) re-reads the language.
+  const lang = useLang()
   return (
     <AuthProvider>
-      <Routes>
+      <Routes key={lang}>
         <Route path="/" element={<Landing />} />
         <Route path="/connexion" element={<Login />} />
         <Route path="/nouveau-mot-de-passe" element={<NewPassword />} />
