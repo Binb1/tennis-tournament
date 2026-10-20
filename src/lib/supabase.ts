@@ -233,18 +233,20 @@ export const hasDraw = (t: WithDraw) => (t.players[0]?.count ?? 0) > 0
  * draw is imported. Rows come latest first (starts_at desc); upcoming sections flip to soonest first.
  * `drafts`: admin only, drafts after the upcoming ones.
  */
-export function groupTournaments<T extends WithDraw>(rows: T[], drafts = false): { title: string; list: T[] }[] {
-  const groups: { title: string; match: (t: T) => boolean; latestFirst?: boolean }[] = [
-    { title: t("common.groupOpen"), match: (t) => t.status === "registration" && hasDraw(t) },
-    { title: t("common.groupLive"), match: (t) => t.status === "live" },
-    { title: t("common.groupUpcoming"), match: (t) => t.status === "registration" && !hasDraw(t) },
-    ...(drafts ? [{ title: t("common.groupDrafts"), match: (t: T) => t.status === "draft" }] : []),
-    { title: t("common.groupFinished"), match: (t) => t.status === "finished", latestFirst: true },
+export type TournamentGroup = "open" | "live" | "upcoming" | "drafts" | "finished"
+
+export function groupTournaments<T extends WithDraw>(rows: T[], drafts = false): { key: TournamentGroup; title: string; list: T[] }[] {
+  const groups: { key: TournamentGroup; title: string; match: (t: T) => boolean; latestFirst?: boolean }[] = [
+    { key: "open", title: t("common.groupOpen"), match: (x) => x.status === "registration" && hasDraw(x) },
+    { key: "live", title: t("common.groupLive"), match: (x) => x.status === "live" },
+    { key: "upcoming", title: t("common.groupUpcoming"), match: (x) => x.status === "registration" && !hasDraw(x) },
+    ...(drafts ? [{ key: "drafts" as const, title: t("common.groupDrafts"), match: (x: T) => x.status === "draft" }] : []),
+    { key: "finished", title: t("common.groupFinished"), match: (x) => x.status === "finished", latestFirst: true },
   ]
   return groups
     .map((g) => {
       const list = rows.filter(g.match)
-      return { title: g.title, list: g.latestFirst ? list : list.reverse() }
+      return { key: g.key, title: g.title, list: g.latestFirst ? list : list.reverse() }
     })
     .filter((g) => g.list.length > 0)
 }

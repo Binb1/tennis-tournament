@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
-import { ChevronRight } from "lucide-react"
+import { ChevronDown, ChevronRight } from "lucide-react"
 
 import { AppShell, Box, ErrorBox, Loading, PageTitle, ResultTag, Tag } from "@/components/court/AppShell"
 import { Flag } from "@/components/court/PlayerLabel"
@@ -90,23 +90,40 @@ export default function Tournaments() {
       {rows && <ToDo rows={rows} mine={mine} openRound={openRound} lastPicks={lastPicks} now={now} />}
       {rows && rows.length === 0 && <p className="py-8 text-center text-chalk/85">{t("tournaments.empty")}</p>}
       {rows &&
-        groupTournaments(rows).map(({ title, list }) => {
+        groupTournaments(rows).map(({ key, title, list }) => {
+          const cards = (
+            <div className="space-y-3">
+              {list.map((x) => (
+                <TournamentCard
+                  key={x.id}
+                  tour={x}
+                  me={mine[x.id]}
+                  winners={winners}
+                  round={openRound[x.id]}
+                  last={mine[x.id] ? lastPicks[mine[x.id].entry_id] : undefined}
+                  now={now}
+                />
+              ))}
+            </div>
+          )
+          // Finished tournaments: folded by default, the page is about what's on.
+          if (key === "finished") {
+            return (
+              <details key={key} className="group mb-8">
+                <summary className="mb-3 flex min-h-11 cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
+                  <h2 className="micro-label">
+                    {title} · {list.length}
+                  </h2>
+                  <ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden="true" />
+                </summary>
+                {cards}
+              </details>
+            )
+          }
           return (
-            <section key={title} className="mb-8">
+            <section key={key} className="mb-8">
               <h2 className="micro-label mb-3">{title}</h2>
-              <div className="space-y-3">
-                {list.map((x) => (
-                  <TournamentCard
-                    key={x.id}
-                    tour={x}
-                    me={mine[x.id]}
-                    winners={winners}
-                    round={openRound[x.id]}
-                    last={mine[x.id] ? lastPicks[mine[x.id].entry_id] : undefined}
-                    now={now}
-                  />
-                ))}
-              </div>
+              {cards}
             </section>
           )
         })}
