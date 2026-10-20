@@ -12,7 +12,7 @@ export default ns(
     step2Title: "Survis",
     step2Text: "Jamais deux fois le même",
     step3Title: "Gagne",
-    step3Text: "Reste le dernier debout",
+    step3Text: "Tiens jusqu'au bout de la finale",
   },
   {
     login: "Log in",
@@ -24,7 +24,7 @@ export default ns(
     step2Title: "Survive",
     step2Text: "Never the same player twice",
     step3Title: "Win",
-    step3Text: "Be the last one standing",
+    step3Text: "Survive all the way through the final",
   },
   {
     login: "Iniciar sesión",
@@ -36,6 +36,6 @@ export default ns(
     step2Title: "Sobrevive",
     step2Text: "Nunca repitas jugador",
     step3Title: "Gana",
-    step3Text: "Sé el último en pie",
+    step3Text: "Aguanta hasta el final del torneo",
   },
 )

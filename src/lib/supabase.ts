@@ -135,23 +135,13 @@ export async function fetchAll<T>(
   }
 }
 
-/**
- * Winning entry ids of finished tournaments: entries alive after the final; if none is alive,
- * the entries with the most rounds survived are co-winners.
- */
+/** Winning entry ids of finished tournaments: the entries still alive after the final (migration 0017). */
 export async function fetchWinners(tournamentIds: string[]): Promise<Set<string>> {
   if (!tournamentIds.length) return new Set()
   const rows = await fetchAll<EntryStatus>((a, b) =>
     supabase.from("entry_status").select("*").in("tournament_id", tournamentIds).order("entry_id").range(a, b),
   )
-  const winners = new Set<string>()
-  for (const tid of tournamentIds) {
-    const list = rows.filter((r) => r.tournament_id === tid)
-    const anyAlive = list.some((r) => r.alive)
-    const max = Math.max(0, ...list.map((r) => r.rounds_survived))
-    for (const r of list) if (anyAlive ? r.alive : r.rounds_survived === max) winners.add(r.entry_id)
-  }
-  return winners
+  return new Set(rows.filter((r) => r.alive).map((r) => r.entry_id))
 }
 
 export type LastPick = {

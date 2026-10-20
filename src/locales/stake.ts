@@ -5,7 +5,7 @@ export default ns(
   {
     tagTitle: "{label} : points ×{mult}. Jusqu'à {max} pts avec un parcours parfait, la victoire et le bon pronostic.",
     roundWon: "{round} gagné",
-    lastStanding: "Dernier debout",
+    lastStanding: "Tournoi gagné",
     goodChampion: "Bon pronostic du vainqueur",
     atStake: "En jeu · points ×{mult}",
     upTo: "Jusqu'à {max} pts",
@@ -17,7 +17,7 @@ export default ns(
   {
     tagTitle: "{label}: points ×{mult}. Up to {max} pts with a perfect run, the win and the right champion prediction.",
     roundWon: "{round} won",
-    lastStanding: "Last one standing",
+    lastStanding: "Tournament won",
     goodChampion: "Right champion prediction",
     atStake: "At stake · points ×{mult}",
     upTo: "Up to {max} pts",
@@ -29,7 +29,7 @@ export default ns(
   {
     tagTitle: "{label}: puntos ×{mult}. Hasta {max} pts con un recorrido perfecto, la victoria y el pronóstico acertado.",
     roundWon: "Victoria · {round}",
-    lastStanding: "Último en pie",
+    lastStanding: "Torneo ganado",
     goodChampion: "Pronóstico del campeón acertado",
     atStake: "En juego · puntos ×{mult}",
     upTo: "Hasta {max} pts",

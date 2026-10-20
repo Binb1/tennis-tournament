@@ -1087,9 +1087,8 @@ function Leaderboard({ data, d, uid }: { data: Data; d: Derived; uid?: string })
     myIdx < 0 ? null : { rank: ranks[myIdx] + 1, tied: ranks.filter((x) => x === ranks[myIdx]).length > 1 }
   const aliveCount = rows.filter((r) => r.alive).length
   const finished = data.t.status === "finished"
-  const maxSurvived = Math.max(0, ...rows.map((r) => r.survived))
-  const isWinner = (r: (typeof rows)[number]) =>
-    finished && total > 0 && (aliveCount > 0 ? r.alive : r.survived === maxSurvived)
+  // Won only by surviving the final; nobody alive at the end = no winner.
+  const isWinner = (r: (typeof rows)[number]) => finished && r.alive
   const winnerCount = rows.filter(isWinner).length
 
   const lockedRounds = data.rounds.filter(d.locked)
