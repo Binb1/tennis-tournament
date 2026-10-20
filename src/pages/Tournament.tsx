@@ -49,19 +49,21 @@ type Data = {
   waivers: Waiver[]
   matches: Match[]
   champions: ChampionPick[]
+  /** My season points in this tournament so far (0 when not joined). */
+  myPoints: number
 }
 type ChipState = "won" | "lost" | "pending" | "missing" | "waived" | "open"
 type TrailStep = { round: Round; state: ChipState; player?: Player }
 
-async function load(id: string): Promise<Data> {
-  const { data: t, error } = await supabase.from("tournaments").select("*").eq("id", id).maybeSingle()
+async function load(id: string, uid: string | undefined): Promise<Data> {
+  const { data: tour, error } = await supabase.from("tournaments").select("*").eq("id", id).maybeSingle()
   if (error) throw new Error(error.message)
-  if (!t) throw new Error(t("tournament.notFound"))
+  if (!tour) throw new Error(t("tournament.notFound"))
   const r = await supabase.from("rounds").select("*").eq("tournament_id", id).order("idx")
   if (r.error) throw new Error(r.error.message)
   const rounds = r.data as Round[]
   const roundIds = rounds.map((x) => x.id)
-  const [players, results, entries, statuses, picks, waivers, matches, champions] = await Promise.all([
+  const [players, results, entries, statuses, picks, waivers, matches, champions, myPoints] = await Promise.all([
     fetchAll<Player>((a, b) => supabase.from("players").select("id, name, seed, country, ranking").eq("tournament_id", id).order("name").range(a, b)),
     fetchAll<PlayerResult>((a, b) =>
       supabase.from("player_results").select("player_id, round_id, result").in("round_id", roundIds).order("player_id").order("round_id").range(a, b),
@@ -78,8 +80,25 @@ async function load(id: string): Promise<Data> {
     fetchAll<ChampionPick>((a, b) =>
       supabase.from("champion_picks").select("entry_id, player_id, entries!inner(tournament_id)").eq("entries.tournament_id", id).order("entry_id").range(a, b),
     ),
+    // My season points here so far (season_entry_points: counts from the last reset; no row = nothing counted yet).
+    uid
+      ? supabase.from("season_entry_points").select("points").eq("tournament_id", id).eq("user_id", uid).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
   ])
-  return { t: t as Tournament, rounds, players, results, entries, statuses, picks, waivers, matches, champions }
+  if (myPoints.error) throw new Error(myPoints.error.message)
+  return {
+    t: tour as Tournament,
+    rounds,
+    players,
+    results,
+    entries,
+    statuses,
+    picks,
+    waivers,
+    matches,
+    champions,
+    myPoints: (myPoints.data as { points: number } | null)?.points ?? 0,
+  }
 }
 
 /** Keyed by id: going from one tournament to another (back/forward) starts from a clean state. */
@@ -107,13 +126,13 @@ function TournamentView({ id }: { id: string }) {
 
   const reload = useCallback(() => {
     setError(null)
-    return load(id)
+    return load(id, uid)
       .then((d) => {
         setData(d)
         setNow(Date.now())
       })
       .catch((e: Error) => setError(e.message))
-  }, [id])
+  }, [id, uid])
 
   useEffect(() => {
     reload()
@@ -192,7 +211,13 @@ function TournamentView({ id }: { id: string }) {
         {formatDate(tn.starts_at)} · {t("tournament.entries", { count: data.entries.length })}
       </p>
 
-      {!tn.test && data.rounds.length > 0 && <StakeCard category={tn.category} rounds={data.rounds} />}
+      {!tn.test && data.rounds.length > 0 && (
+        <StakeCard
+          category={tn.category}
+          rounds={data.rounds}
+          scored={d.myEntry && tn.status !== "registration" ? data.myPoints : undefined}
+        />
+      )}
 
       {canJoin(tn, data.rounds, now) && !d.myEntry && (
         <div className="mb-6 space-y-3">
@@ -491,15 +516,16 @@ function MyPick({ data, d, onChanged, onPlan }: { data: Data; d: Derived; onChan
 
       <ChampionCard data={data} d={d} onChanged={onChanged} />
 
-      {statusRound && statusPid && <ResultMoment id={`${d.myEntry.id}:${statusRound.id}`} result={d.pickResult(statusPid, statusRound)} />}
-
       {statusRound && statusPid && (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-l-4 border-chalk bg-brick/40 px-4 py-3 text-sm">
-          <span>{t("tournament.myPickRound", { round: roundName(statusRound.name) })}</span>
-          <strong className="font-bold">
-            <PlayerName p={d.playerById.get(statusPid)} />
-          </strong>
-          <ResultTag result={d.pickResult(statusPid, statusRound)} />
+        <div className="flex items-center gap-3 border-l-4 border-chalk bg-brick/40 px-4 py-3 text-sm">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+            <span>{t("tournament.myPickRound", { round: roundName(statusRound.name) })}</span>
+            <strong className="font-bold">
+              <PlayerName p={d.playerById.get(statusPid)} />
+            </strong>
+            <ResultTag result={d.pickResult(statusPid, statusRound)} />
+          </div>
+          <ResultMoment id={`${d.myEntry.id}:${statusRound.id}`} result={d.pickResult(statusPid, statusRound)} />
         </div>
       )}
 
@@ -569,14 +595,17 @@ function MyPick({ data, d, onChanged, onPlan }: { data: Data; d: Derived; onChan
   )
 }
 
-/** My pick's result, played once per device: the player jumps for a win, the ball clips the net for a loss. */
+/**
+ * My pick's result, played once per device, small at the end of the pick line: the player jumps for a win, the ball
+ * clips the net for a loss.
+ */
 function ResultMoment({ id, result }: { id: string; result: "won" | "lost" | undefined }) {
   if (!result) return null
   return (
     <Once id={`${result}:pick:${id}`}>
-      <Box aria-hidden="true" className="flex justify-center px-4 py-4">
-        {result === "won" ? <PixelWin /> : <PixelNetFault />}
-      </Box>
+      <span aria-hidden="true" className="-my-2 shrink-0">
+        {result === "won" ? <PixelWin className="w-14" /> : <PixelNetFault className="w-16" />}
+      </span>
     </Once>
   )
 }

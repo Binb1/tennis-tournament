@@ -40,7 +40,8 @@ export function StakeTag({ category, rounds }: { category: Category; rounds: num
 }
 
 /** Tournament page: what's at stake, with the breakdown per round and the bonuses on tap. */
-export function StakeCard({ category, rounds }: { category: Category; rounds: Round[] }) {
+/** `scored`: my season points here so far, shown once I play (undefined: not shown). */
+export function StakeCard({ category, rounds, scored }: { category: Category; rounds: Round[]; scored?: number }) {
   const [open, setOpen] = useState(false)
   const c = categoryOf(category)
   const lastIdx = Math.max(0, ...rounds.map((r) => r.idx))
@@ -66,6 +67,12 @@ export function StakeCard({ category, rounds }: { category: Category; rounds: Ro
           </span>
           <span className="mt-1 block font-display text-2xl leading-tight">{t("stake.upTo", { max })}</span>
         </span>
+        {scored != null && (
+          <span className="shrink-0 border-l-2 border-chalk/40 pl-3 text-right">
+            <span className="micro-label">{t("stake.scored")}</span>
+            <span className="mt-1 block font-display text-2xl leading-tight tabular-nums">{t("stake.pts", { n: scored })}</span>
+          </span>
+        )}
         <span className="flex shrink-0 items-center gap-1 text-xs font-medium">
           {open ? t("stake.hide") : t("stake.details")}
           <ChevronDown className={cn("size-4 transition-transform", open && "rotate-180")} />
