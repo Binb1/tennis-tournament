@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import type { Session } from "@supabase/supabase-js"
 import { Navigate } from "react-router-dom"
 
+import { t } from "@/lib/i18n"
 import { supabase, type Profile } from "@/lib/supabase"
 import { AppShell, ErrorBox, LineButton, Loading } from "@/components/court/AppShell"
 
@@ -94,7 +95,7 @@ export function Protected({
   if (error)
     return (
       <AppShell bare>
-        <ErrorBox message={`Profil indisponible : ${error}`} onRetry={refreshProfile} />
+        <ErrorBox message={t("auth.profileUnavailable", { error })} onRetry={refreshProfile} />
       </AppShell>
     )
   if (!onboarding && !profile) return <Navigate to="/bienvenue" replace />
@@ -102,9 +103,9 @@ export function Protected({
   if (profile?.deleted_at)
     return (
       <AppShell bare>
-        <ErrorBox message="Ce compte a été supprimé." />
+        <ErrorBox message={t("auth.accountDeleted")} />
         <LineButton onClick={() => supabase.auth.signOut()} className="mt-4 w-full">
-          Se déconnecter
+          {t("auth.signOut")}
         </LineButton>
       </AppShell>
     )

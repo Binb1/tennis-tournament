@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js"
 
+import { locale, t } from "@/lib/i18n"
 import type { Category } from "@/lib/scoring"
 
 const url = import.meta.env.VITE_SUPABASE_URL || "https://placeholder.supabase.co"
@@ -94,9 +95,9 @@ export type EntryStatus = {
   rounds_survived: number
 }
 
-/** Public name of a user: deleted accounts show as "utilisateur supprimé". */
+/** Public name of a user: deleted accounts show as "utilisateur supprimé" (translated). */
 export function displayName(p: { username: string; deleted_at: string | null } | null | undefined) {
-  if (!p || p.deleted_at) return "utilisateur supprimé"
+  if (!p || p.deleted_at) return t("common.deletedUser")
   return p.username
 }
 
@@ -216,11 +217,20 @@ export async function fetchLastPicks(entries: EntryStatus[]): Promise<Record<str
   )
 }
 
-export const STATUS_LABEL: Record<TournamentStatus, string> = {
-  draft: "Brouillon",
-  registration: "Ouvert",
-  live: "En cours",
-  finished: "Terminé",
+/** Getters: each label is read in the current language. */
+export const STATUS_LABEL: Readonly<Record<TournamentStatus, string>> = {
+  get draft() {
+    return t("common.statusDraft")
+  },
+  get registration() {
+    return t("common.statusRegistration")
+  },
+  get live() {
+    return t("common.statusLive")
+  },
+  get finished() {
+    return t("common.statusFinished")
+  },
 }
 
 /** A tournament row with its player count (`players(count)`), enough to know whether the draw is imported. */
@@ -235,11 +245,11 @@ export const hasDraw = (t: WithDraw) => (t.players[0]?.count ?? 0) > 0
  */
 export function groupTournaments<T extends WithDraw>(rows: T[], drafts = false): { title: string; list: T[] }[] {
   const groups: { title: string; match: (t: T) => boolean; latestFirst?: boolean }[] = [
-    { title: "Ouverts", match: (t) => t.status === "registration" && hasDraw(t) },
-    { title: "En cours", match: (t) => t.status === "live" },
-    { title: "À venir", match: (t) => t.status === "registration" && !hasDraw(t) },
-    ...(drafts ? [{ title: "Brouillons", match: (t: T) => t.status === "draft" }] : []),
-    { title: "Terminés", match: (t) => t.status === "finished", latestFirst: true },
+    { title: t("common.groupOpen"), match: (t) => t.status === "registration" && hasDraw(t) },
+    { title: t("common.groupLive"), match: (t) => t.status === "live" },
+    { title: t("common.groupUpcoming"), match: (t) => t.status === "registration" && !hasDraw(t) },
+    ...(drafts ? [{ title: t("common.groupDrafts"), match: (t: T) => t.status === "draft" }] : []),
+    { title: t("common.groupFinished"), match: (t) => t.status === "finished", latestFirst: true },
   ]
   return groups
     .map((g) => {
@@ -251,11 +261,11 @@ export function groupTournaments<T extends WithDraw>(rows: T[], drafts = false):
 
 /** Registration without an imported draw is shown as "upcoming", not "open". */
 export const statusLabel = (status: TournamentStatus, hasDraw: boolean) =>
-  status === "registration" && !hasDraw ? "Tableau à venir" : STATUS_LABEL[status]
+  status === "registration" && !hasDraw ? t("common.statusNoDraw") : STATUS_LABEL[status]
 
 export function formatDate(iso: string | null, withTime = false) {
-  if (!iso) return "Date à venir"
-  return new Date(iso).toLocaleString("fr-FR", {
+  if (!iso) return t("common.dateTbd")
+  return new Date(iso).toLocaleString(locale(), {
     weekday: withTime ? "long" : undefined,
     day: "numeric",
     month: "long",

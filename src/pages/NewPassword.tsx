@@ -4,7 +4,8 @@ import { ArrowRight } from "lucide-react"
 
 import { AppShell, ChalkButton, ErrorBox, Loading, PageTitle, PasswordField } from "@/components/court/AppShell"
 import { useAuth } from "@/lib/auth"
-import { authErrorFr } from "@/lib/authErrors"
+import { authError } from "@/lib/authErrors"
+import { t } from "@/lib/i18n"
 import { supabase } from "@/lib/supabase"
 
 /** Link errors come back in the URL hash (e.g. an expired recovery link). */
@@ -35,40 +36,40 @@ export default function NewPassword() {
   async function submit(e: FormEvent) {
     e.preventDefault()
     setError(null)
-    if (password.length < 8) return setError("Mot de passe trop court (8 caractères minimum)")
+    if (password.length < 8) return setError(t("login.passwordTooShort"))
     setBusy(true)
     const { error } = await supabase.auth.updateUser({ password })
     setBusy(false)
-    if (error) return setError(authErrorFr(error))
+    if (error) return setError(authError(error))
     navigate("/tournois", { replace: true })
   }
 
   return (
     <AppShell bare>
-      <PageTitle eyebrow="Mot de passe oublié">Nouveau mot de passe</PageTitle>
+      <PageTitle eyebrow={t("login.newPasswordEyebrow")}>{t("login.newPasswordTitle")}</PageTitle>
       {loading && !ready ? (
         <Loading />
       ) : !ready ? (
         <div className="space-y-4">
-          <ErrorBox message={badLink ? "Ce lien n'est plus valide. Demande un nouveau lien depuis la page de connexion." : "Ouvre le lien reçu par e-mail pour choisir un nouveau mot de passe."} />
+          <ErrorBox message={badLink ? t("login.linkExpired") : t("login.openLink")} />
           <Link to="/connexion" className="inline-flex min-h-11 items-center text-sm underline underline-offset-4">
-            Retour à la connexion
+            {t("login.backToLogin")}
           </Link>
         </div>
       ) : (
         <form onSubmit={submit} className="space-y-5">
           <PasswordField
-            label="Nouveau mot de passe"
+            label={t("login.newPassword")}
             required
             minLength={8}
             autoComplete="new-password"
-            hint="8 caractères minimum"
+            hint={t("login.passwordHint")}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
           {error && <ErrorBox message={error} />}
           <ChalkButton type="submit" disabled={busy} className="w-full">
-            {busy ? "Un instant…" : "Enregistrer"}
+            {busy ? t("login.wait") : t("login.save")}
             <ArrowRight className="size-5" />
           </ChalkButton>
         </form>

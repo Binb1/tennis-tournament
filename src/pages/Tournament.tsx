@@ -9,6 +9,7 @@ import { Flag, MatchLine, PlayerName } from "@/components/court/PlayerLabel"
 import { SocialIcons } from "@/components/court/Socials"
 import { BallBoyRun, PixelNetFault, PixelWin, ShotClock } from "@/components/pixel/Animations"
 import { useAuth } from "@/lib/auth"
+import { dbError, locale, roundName, t, tr, type MsgKey } from "@/lib/i18n"
 import { Once } from "@/lib/seen"
 import { bonusPoints, roundPoints } from "@/lib/scoring"
 import { useThemeOverride } from "@/lib/theme"
@@ -55,7 +56,7 @@ type TrailStep = { round: Round; state: ChipState; player?: Player }
 async function load(id: string): Promise<Data> {
   const { data: t, error } = await supabase.from("tournaments").select("*").eq("id", id).maybeSingle()
   if (error) throw new Error(error.message)
-  if (!t) throw new Error("Tournoi introuvable")
+  if (!t) throw new Error(t("tournament.notFound"))
   const r = await supabase.from("rounds").select("*").eq("tournament_id", id).order("idx")
   if (r.error) throw new Error(r.error.message)
   const rounds = r.data as Round[]
@@ -120,8 +121,8 @@ function TournamentView({ id }: { id: string }) {
 
   // Coarse clock so the current round flips when a lock passes.
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 30_000)
-    return () => clearInterval(t)
+    const timer = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(timer)
   }, [])
 
   const d = useMemo(() => (data ? derive(data, uid, now) : null), [data, uid, now])
@@ -132,8 +133,8 @@ function TournamentView({ id }: { id: string }) {
     if (lockAt == null) return
     const ms = lockAt - Date.now() + 50
     if (ms > 2 ** 31 - 1) return // setTimeout overflow: the 30 s clock covers it
-    const t = setTimeout(() => setNow(Date.now()), Math.max(0, ms))
-    return () => clearTimeout(t)
+    const timer = setTimeout(() => setNow(Date.now()), Math.max(0, ms))
+    return () => clearTimeout(timer)
   }, [lockAt])
   useThemeOverride(data?.t.theme)
 
@@ -150,7 +151,7 @@ function TournamentView({ id }: { id: string }) {
     setJoining(true)
     setJoinError(null)
     const { error } = await supabase.rpc("join_tournament", { p_tournament_id: id })
-    if (error) setJoinError(error.message)
+    if (error) setJoinError(dbError(error.message))
     else await reload()
     setJoining(false)
   }
@@ -179,29 +180,27 @@ function TournamentView({ id }: { id: string }) {
     )
   }
 
-  const { t } = data
+  const tn = data.t
   return (
     <AppShell>
       <BackLink />
-      <PageTitle eyebrow={`${statusLabel(t.status, data.players.length > 0)} · ${t.tour}`}>
-        <Flag code={t.country} className="mr-3 align-[0.06em]" />
-        {t.name}
+      <PageTitle eyebrow={`${statusLabel(tn.status, data.players.length > 0)} · ${tn.tour}`}>
+        <Flag code={tn.country} className="mr-3 align-[0.06em]" />
+        {tn.name}
       </PageTitle>
       <p className="-mt-2 mb-5 text-sm text-chalk/85">
-        {formatDate(t.starts_at)} · {data.entries.length} {data.entries.length > 1 ? "inscrits" : "inscrit"}
+        {formatDate(tn.starts_at)} · {t("tournament.entries", { count: data.entries.length })}
       </p>
 
-      {!t.test && data.rounds.length > 0 && <StakeCard category={t.category} rounds={data.rounds} />}
+      {!tn.test && data.rounds.length > 0 && <StakeCard category={tn.category} rounds={data.rounds} />}
 
-      {canJoin(t, data.rounds, now) && !d.myEntry && (
+      {canJoin(tn, data.rounds, now) && !d.myEntry && (
         <div className="mb-6 space-y-3">
           <ChalkButton onClick={join} disabled={joining} className="w-full">
-            {joining ? "Inscription…" : "Rejoindre le tournoi"}
+            {joining ? t("tournament.joining") : t("tournament.join")}
           </ChalkButton>
-          {t.status === "live" && d.currentRound && (
-            <p className="text-sm text-chalk/85">
-              Inscription en cours de tournoi : les tours déjà joués ne comptent pas, tu commences au {d.currentRound.name}.
-            </p>
+          {tn.status === "live" && d.currentRound && (
+            <p className="text-sm text-chalk/85">{t("tournament.lateJoin", { round: roundName(d.currentRound.name) })}</p>
           )}
           {joinError && <ErrorBox message={joinError} />}
         </div>
@@ -221,7 +220,7 @@ function TournamentView({ id }: { id: string }) {
 function BackLink() {
   return (
     <Link to="/tournois" className="mb-2 inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-chalk/90 hover:text-chalk">
-      <ArrowLeft className="size-4" /> Tournois
+      <ArrowLeft className="size-4" /> {t("tournament.back")}
     </Link>
   )
 }
@@ -361,9 +360,9 @@ const TAB_OF: Record<string, Tab> = { choix: "pick", classement: "board", tablea
 
 function Tabs({ value, onChange }: { value: Tab; onChange: (v: Tab) => void }) {
   const tabs = [
-    ["pick", "Mon choix"],
-    ["board", "Classement"],
-    ["draw", "Tableau"],
+    ["pick", t("tournament.myPick")],
+    ["board", t("tournament.tabBoard")],
+    ["draw", t("tournament.tabDraw")],
   ] as const
   // Three court boxes separated by chalk lines.
   return (
@@ -395,32 +394,32 @@ const CHIP_STYLE: Record<ChipState, string> = {
   waived: "border-dashed border-chalk text-chalk",
   open: "border-chalk/40 text-chalk/70",
 }
-const CHIP_LABEL: Record<ChipState, string> = {
-  won: "gagné",
-  lost: "perdu",
-  pending: "en attente",
-  missing: "aucun choix",
-  waived: "repêché",
-  open: "à choisir",
+const CHIP_LABEL: Record<ChipState, MsgKey> = {
+  won: "tournament.chipWon",
+  lost: "tournament.chipLost",
+  pending: "tournament.chipPending",
+  missing: "tournament.chipMissing",
+  waived: "tournament.chipWaived",
+  open: "tournament.chipOpen",
 }
 
 function Chip({ step, withPlayer = false }: { step: TrailStep; withPlayer?: boolean }) {
   return (
     <span
-      title={`${step.round.name} · ${step.player?.name ?? CHIP_LABEL[step.state]}`}
+      title={`${roundName(step.round.name)} · ${step.player?.name ?? t(CHIP_LABEL[step.state])}`}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-[2px] border-2 px-1.5 py-0.5 text-[11px] font-bold whitespace-nowrap [font-stretch:85%]",
         CHIP_STYLE[step.state],
       )}
     >
-      <span className="tracking-[0.08em] uppercase">{step.round.name}</span>
+      <span className="tracking-[0.08em] uppercase">{roundName(step.round.name)}</span>
       {withPlayer && (
         <span className="inline-flex items-center gap-1 font-medium normal-case">
           <Flag code={step.player?.country} />
-          {step.player?.name ?? CHIP_LABEL[step.state]}
+          {step.player?.name ?? t(CHIP_LABEL[step.state])}
         </span>
       )}
-      <span className="sr-only">{CHIP_LABEL[step.state]}</span>
+      <span className="sr-only">{t(CHIP_LABEL[step.state])}</span>
     </span>
   )
 }
@@ -445,8 +444,8 @@ function MyPick({ data, d, onChanged, onPlan }: { data: Data; d: Derived; onChan
     return (
       <Empty>
         {data.t.status === "registration"
-          ? "Rejoins le tournoi pour faire ton premier choix."
-          : "Tu n'es pas inscrit à ce tournoi."}
+          ? t("tournament.joinFirst")
+          : t("tournament.notJoined")}
       </Empty>
     )
   }
@@ -461,7 +460,10 @@ function MyPick({ data, d, onChanged, onPlan }: { data: Data; d: Derived; onChan
   const lockedRounds = data.rounds.filter(d.locked)
   const statusRound = status === "live" ? lockedRounds[lockedRounds.length - 1] : undefined
   const statusPid = statusRound ? d.myPicks.get(statusRound.id) : undefined
-  const roundName = (idx: number) => d.roundByIdx.get(idx)?.name ?? `tour ${idx}`
+  const roundLabel = (idx: number) => {
+    const name = d.roundByIdx.get(idx)?.name
+    return name ? roundName(name) : t("tournament.roundN", { n: idx })
+  }
   // Queued players who lost before their round: that pick is a loss unless changed before the lock.
   const stale = openRounds.filter((r) => {
     const pid = d.myPicks.get(r.id)
@@ -483,8 +485,7 @@ function MyPick({ data, d, onChanged, onPlan }: { data: Data; d: Derived; onChan
 
       {alive && stale.length > 0 && (
         <div role="alert" className="border-l-4 border-ball bg-ink/70 px-4 py-3 text-sm font-medium">
-          {stale.map((r) => r.name).join(", ")} : ton joueur prévu est éliminé. Change-le avant le verrouillage, sinon tu
-          es éliminé.
+          {t("tournament.stale", { rounds: stale.map((r) => roundName(r.name)).join(", ") })}
         </div>
       )}
 
@@ -494,7 +495,7 @@ function MyPick({ data, d, onChanged, onPlan }: { data: Data; d: Derived; onChan
 
       {statusRound && statusPid && (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-l-4 border-chalk bg-brick/40 px-4 py-3 text-sm">
-          <span>Mon choix · {statusRound.name} :</span>
+          <span>{t("tournament.myPickRound", { round: roundName(statusRound.name) })}</span>
           <strong className="font-bold">
             <PlayerName p={d.playerById.get(statusPid)} />
           </strong>
@@ -504,7 +505,7 @@ function MyPick({ data, d, onChanged, onPlan }: { data: Data; d: Derived; onChan
 
       {trail.length > 0 && (
         <section>
-          <h2 className="micro-label mb-2">Mon parcours</h2>
+          <h2 className="micro-label mb-2">{t("tournament.myPath")}</h2>
           <div className="flex flex-wrap gap-1.5">
             {trail.map((s) => (
               <Chip key={s.round.id} step={s} withPlayer />
@@ -515,18 +516,18 @@ function MyPick({ data, d, onChanged, onPlan }: { data: Data; d: Derived; onChan
 
       {!alive ? (
         <Box className="px-4 py-5">
-          <p className="font-display text-2xl">Éliminé</p>
+          <p className="font-display text-2xl">{t("tournament.eliminated")}</p>
           <p className="mt-1 text-chalk/90">
-            Ton aventure s'arrête au {roundName(d.myStatus!.eliminated_round!)}. Suis la suite dans le classement.
+            {t("tournament.eliminatedAt", { round: roundLabel(d.myStatus!.eliminated_round!) })}
           </p>
         </Box>
       ) : !round ? (
-        <Empty>Aucun tour ouvert pour le moment.</Empty>
+        <Empty>{t("tournament.noOpenRound")}</Empty>
       ) : (
         <>
           {openRounds.length > 1 && (
             <ChalkButton onClick={onPlan} className="w-full">
-              Remplir tous les tours
+              {t("tournament.fillAll")}
               <span className="ml-2 tabular-nums opacity-75">
                 {filled}/{openRounds.length}
               </span>
@@ -535,14 +536,14 @@ function MyPick({ data, d, onChanged, onPlan }: { data: Data; d: Derived; onChan
 
           <section ref={gridRef} className="scroll-mt-4 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="micro-label">Mes choix à venir</h2>
+              <h2 className="micro-label">{t("tournament.upcoming")}</h2>
               <Segmented
-                label="Affichage de mes choix"
+                label={t("tournament.myPicksView")}
                 value={view}
                 onChange={setView}
                 options={[
-                  ["list", "Liste"],
-                  ["tree", "Tableau"],
+                  ["list", t("tournament.viewList")],
+                  ["tree", t("tournament.viewBracket")],
                 ]}
               />
             </div>
@@ -553,12 +554,11 @@ function MyPick({ data, d, onChanged, onPlan }: { data: Data; d: Derived; onChan
           {!pickedId &&
             (isCurrent ? (
               <div role="status" className="border-l-4 border-ball bg-ink/70 px-4 py-3 text-sm font-medium">
-                Pas encore de choix pour ce tour. Sans choix au verrouillage, tu es éliminé.
+                {t("tournament.noPickYet")}
               </div>
             ) : (
               <div role="status" className="border-l-4 border-chalk bg-brick/40 px-4 py-3 text-sm">
-                Tu peux préparer ce tour dès maintenant ou attendre : ton choix reste modifiable jusqu'à son
-                verrouillage.
+                {t("tournament.canPrepare")}
               </div>
             ))}
 
@@ -599,7 +599,7 @@ function ChampionCard({ data, d, onChanged }: { data: Data; d: Derived; onChange
     setSaving(playerId ?? "clear")
     setError(null)
     const { error } = await supabase.rpc("set_champion_pick", { p_tournament_id: data.t.id, p_player_id: playerId })
-    if (error) setError(error.message)
+    if (error) setError(dbError(error.message))
     else {
       await onChanged()
       setOpen(false)
@@ -616,7 +616,7 @@ function ChampionCard({ data, d, onChanged }: { data: Data; d: Derived; onChange
     <section className="space-y-3">
       <Box className="px-4 py-4">
         <div className="flex items-baseline justify-between gap-3">
-          <span className="micro-label">Pronostic du vainqueur</span>
+          <span className="micro-label">{t("tournament.champion")}</span>
           <span className="text-sm font-bold tabular-nums">+{bonus} pts</span>
         </div>
         {pid ? (
@@ -627,17 +627,17 @@ function ChampionCard({ data, d, onChanged }: { data: Data; d: Derived; onChange
             {!editable && <ResultTag result={d.championResult(pid)} />}
           </div>
         ) : (
-          <p className="mt-2 font-display text-2xl leading-tight">Qui gagne le titre ?</p>
+          <p className="mt-2 font-display text-2xl leading-tight">{t("tournament.whoWins")}</p>
         )}
         <p className="mt-1 text-sm text-chalk/85">
           {editable
-            ? "Modifiable jusqu'au premier match du tournoi. Compte même si tu es éliminé."
-            : "Compte même si tu es éliminé."}
+            ? t("tournament.championEditable")
+            : t("tournament.championCounts")}
         </p>
         {editable && (
           <div className="mt-3 flex flex-wrap items-center gap-4">
             <LineButton onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-              {open ? "Fermer" : pid ? "Changer" : "Choisir le vainqueur"}
+              {open ? t("tournament.close") : pid ? t("tournament.change") : t("tournament.pickChampion")}
             </LineButton>
             {pid && (
               <button
@@ -645,7 +645,7 @@ function ChampionCard({ data, d, onChanged }: { data: Data; d: Derived; onChange
                 disabled={!!saving}
                 className="min-h-11 text-xs font-medium text-chalk/90 underline underline-offset-2 hover:text-chalk"
               >
-                {saving === "clear" ? "…" : "Retirer"}
+                {saving === "clear" ? "…" : t("tournament.remove")}
               </button>
             )}
           </div>
@@ -654,7 +654,7 @@ function ChampionCard({ data, d, onChanged }: { data: Data; d: Derived; onChange
       {error && <ErrorBox message={error} />}
       {open && editable && (
         <>
-          <SearchInput value={q} onChange={setQ} placeholder="Chercher un joueur" />
+          <SearchInput value={q} onChange={setQ} placeholder={t("tournament.searchPlayer")} />
           <ul className="max-h-[50svh] overflow-y-auto border-2 border-chalk/90">
             {list.map((p) => {
               const selected = p.id === pid
@@ -678,7 +678,7 @@ function ChampionCard({ data, d, onChanged }: { data: Data; d: Derived; onChange
                 </li>
               )
             })}
-            {list.length === 0 && <li className="px-3 py-4 text-sm text-chalk/80">Aucun joueur.</li>}
+            {list.length === 0 && <li className="px-3 py-4 text-sm text-chalk/80">{t("tournament.noPlayer")}</li>}
           </ul>
         </>
       )}
@@ -715,10 +715,10 @@ function RoundGrid({
               out && !on && "border-ball",
             )}
           >
-            <span className="block truncate text-[11px] font-bold tracking-[0.08em] uppercase [font-stretch:85%]">{r.name}</span>
+            <span className="block truncate text-[11px] font-bold tracking-[0.08em] uppercase [font-stretch:85%]">{roundName(r.name)}</span>
             <span className={cn("flex items-center gap-1 text-xs", !pid && "opacity-70", out && "line-through")}>
               {pid && <Flag code={d.playerById.get(pid)?.country} />}
-              <span className="min-w-0 truncate">{pid ? shortName(d.playerById.get(pid)?.name ?? "") : "à choisir"}</span>
+              <span className="min-w-0 truncate">{pid ? shortName(d.playerById.get(pid)?.name ?? "") : t("tournament.chipOpen")}</span>
             </span>
           </button>
         )
@@ -746,7 +746,10 @@ function PlayerPicker({
   const [error, setError] = useState<string | null>(null)
   const [q, setQ] = useState("")
   const pickedId = d.myPicks.get(round.id)
-  const roundName = (idx: number) => d.roundByIdx.get(idx)?.name ?? `tour ${idx}`
+  const roundLabel = (idx: number) => {
+    const name = d.roundByIdx.get(idx)?.name
+    return name ? roundName(name) : t("tournament.roundN", { n: idx })
+  }
 
   // My picks in the other rounds of my path.
   const others = data.rounds.flatMap((r) => {
@@ -756,13 +759,13 @@ function PlayerPicker({
   // Why a player can't be picked, or null if he can.
   const reason = (p: Player) => {
     const lost = d.lostRound.get(p.id)
-    if (lost) return `Éliminé · ${roundName(lost)}`
-    if (d.exempt(p.id, round)) return `Exempté (bye) · ${round.name}`
+    if (lost) return t("tournament.outAt", { round: roundLabel(lost) })
+    if (d.exempt(p.id, round)) return t("tournament.byeAt", { round: roundName(round.name) })
     const used = others.find((o) => o.pid === p.id)
-    if (used) return `${d.locked(used.r) ? "Déjà choisi" : "Prévu"} · ${used.r.name}`
+    if (used) return t(d.locked(used.r) ? "tournament.usedAt" : "tournament.plannedAt", { round: roundName(used.r.name) })
     // Both must win up to the round they meet in: one of the two picks is a sure loss.
     const clash = others.find((o) => (d.meetRound(p.id, o.pid) ?? Infinity) <= Math.min(round.idx, o.r.idx))
-    if (clash) return `Croise ${shortName(d.playerById.get(clash.pid)?.name ?? "")} · ${clash.r.name}`
+    if (clash) return t("tournament.clashAt", { player: shortName(d.playerById.get(clash.pid)?.name ?? ""), round: roundName(clash.r.name) })
     return null
   }
   const needle = q.trim().toLowerCase()
@@ -775,7 +778,7 @@ function PlayerPicker({
     setSaving(key)
     setError(null)
     const { error } = await supabase.rpc(fn, args)
-    if (error) setError(error.message)
+    if (error) setError(dbError(error.message))
     else await onChanged()
     setSaving(null)
     return !error
@@ -790,7 +793,7 @@ function PlayerPicker({
       {error && <ErrorBox message={error} />}
       <div className="flex items-end justify-between gap-3">
         <h2 className="micro-label">
-          Joueurs du tableau · {round.name} · +{d.pointsOf(round)} pts
+          {t("tournament.drawPlayers", { round: roundName(round.name), pts: d.pointsOf(round) })}
         </h2>
         {pickedId ? (
           <button
@@ -798,13 +801,13 @@ function PlayerPicker({
             disabled={!!saving}
             className="min-h-11 text-xs font-medium text-chalk/90 underline underline-offset-2 hover:text-chalk"
           >
-            {saving === "clear" ? "…" : "Retirer mon choix"}
+            {saving === "clear" ? "…" : t("tournament.removePick")}
           </button>
         ) : (
-          <span className="text-xs text-chalk/80">Modifiable jusqu'au verrouillage</span>
+          <span className="text-xs text-chalk/80">{t("tournament.editableUntilLock")}</span>
         )}
       </div>
-      <SearchInput value={q} onChange={setQ} placeholder="Chercher un joueur" />
+      <SearchInput value={q} onChange={setQ} placeholder={t("tournament.searchPlayer")} />
       <ul className="border-2 border-chalk/90">
         {list.map(({ p, why }) => {
           const selected = p.id === pickedId
@@ -834,7 +837,7 @@ function PlayerPicker({
                 {selected && (
                   // Inverted tag on the chalk row: surface colour fill, chalk text.
                   <span className="shrink-0 rounded-[2px] bg-clay px-2 py-0.5 text-[11px] font-bold tracking-[0.12em] whitespace-nowrap text-chalk uppercase [font-stretch:85%]">
-                    Mon choix
+                    {t("tournament.myPick")}
                   </span>
                 )}
                 {saving === p.id && <span className="shrink-0 text-xs">…</span>}
@@ -842,7 +845,7 @@ function PlayerPicker({
             </li>
           )
         })}
-        {list.length === 0 && <li className="px-3 py-4 text-sm text-chalk/80">Aucun joueur.</li>}
+        {list.length === 0 && <li className="px-3 py-4 text-sm text-chalk/80">{t("tournament.noPlayer")}</li>}
       </ul>
     </section>
   )
@@ -874,24 +877,24 @@ function Planner({ data, d, onChanged, onClose }: { data: Data; d: Derived; onCh
               <Flag code={data.t.country} className="mr-1.5" />
               {data.t.name}
             </span>
-            <h1 className="font-display text-3xl leading-tight">Remplir mes tours</h1>
+            <h1 className="font-display text-3xl leading-tight">{t("tournament.fillMine")}</h1>
           </div>
           <LineButton onClick={onClose} className="shrink-0">
-            Fermer
+            {t("tournament.close")}
           </LineButton>
         </div>
 
         {!round ? (
-          <Empty>Aucun tour ouvert pour le moment.</Empty>
+          <Empty>{t("tournament.noOpenRound")}</Empty>
         ) : (
           <>
             <div>
               <div className="flex items-baseline justify-between text-xs font-bold [font-stretch:85%]">
                 <span className="tracking-[0.08em] uppercase">
-                  Tour {step + 1} / {openRounds.length}
+                  {t("tournament.stepOf", { step: step + 1, total: openRounds.length })}
                 </span>
                 <span className="tabular-nums">
-                  {filled}/{openRounds.length} {filled > 1 ? "remplis" : "rempli"}
+                  {t("tournament.filled", { count: filled, total: openRounds.length })}
                 </span>
               </div>
               <span className="mt-1.5 block h-2.5 bg-brick/50">
@@ -903,20 +906,26 @@ function Planner({ data, d, onChanged, onClose }: { data: Data; d: Derived; onCh
 
             <Box className="px-4 py-4">
               <span className="micro-label">
-                {round.id === d.currentRound?.id ? "Verrouillage" : "Verrouillage prévu"} · {formatDate(round.locks_at, true)}
+                {round.id === d.currentRound?.id ? t("tournament.lock") : t("tournament.lockPlanned")} · {formatDate(round.locks_at, true)}
               </span>
-              <p className="mt-1 font-display text-2xl leading-tight">{round.name}</p>
+              <p className="mt-1 font-display text-2xl leading-tight">{roundName(round.name)}</p>
               <p className="mt-1 text-sm text-chalk/90">
                 {pickedId ? (
                   <span className="inline-flex items-center gap-1.5">
-                    Mon choix : <strong className="font-bold"><PlayerName p={d.playerById.get(pickedId)} rank={false} /></strong>
+                    {tr("tournament.myPickIs", {
+                      player: (
+                        <strong className="font-bold">
+                          <PlayerName p={d.playerById.get(pickedId)} rank={false} />
+                        </strong>
+                      ),
+                    })}
                   </span>
                 ) : (
-                  "Choisis le joueur qui gagne ce tour."
+                  t("tournament.chooseWinner")
                 )}
               </p>
               {pickedId && d.lostRound.has(pickedId) && (
-                <p className="mt-2 border-l-4 border-ball pl-3 text-sm font-medium">Ce joueur est éliminé : change-le.</p>
+                <p className="mt-2 border-l-4 border-ball pl-3 text-sm font-medium">{t("tournament.playerOutChange")}</p>
               )}
             </Box>
 
@@ -925,15 +934,15 @@ function Planner({ data, d, onChanged, onClose }: { data: Data; d: Derived; onCh
             {/* Step nav, always at hand under the long player list. */}
             <div className="clay-surface sticky bottom-(--tabbar) z-10 -mx-4 flex gap-2 border-t-2 border-chalk/90 px-4 py-3 lg:mx-0 lg:px-0">
               <LineButton onClick={() => go(step - 1)} disabled={step === 0} className="flex-1">
-                ← Précédent
+                {t("tournament.prev")}
               </LineButton>
               {step < openRounds.length - 1 ? (
                 <ChalkButton onClick={() => go(step + 1)} className="flex-1">
-                  Suivant →
+                  {t("tournament.next")}
                 </ChalkButton>
               ) : (
                 <ChalkButton onClick={onClose} className="flex-1">
-                  Terminer
+                  {t("tournament.finish")}
                 </ChalkButton>
               )}
             </div>
@@ -972,26 +981,27 @@ function MyBracket({ data, d, round, boxClassName }: { data: Data; d: Derived; r
     })
   }, [slotKey, from])
 
-  if (data.matches.length === 0) return <Empty>Les matchs ne sont pas encore publiés.</Empty>
+  if (data.matches.length === 0) return <Empty>{t("tournament.noMatches")}</Empty>
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-chalk/90">
         <span className="inline-flex items-center gap-1">
           <span className="inline-block h-3 w-1 bg-ball" />
-          <strong>mon choix</strong>
+          <strong>{t("tournament.legendMine")}</strong>
           <ChevronRight className="size-3.5 text-ball" aria-hidden="true" />
-          passe
+          {t("tournament.legendThrough")}
         </span>
-        <span className="text-chalk/55 line-through">perd</span>
+        <span className="text-chalk/55 line-through">{t("tournament.legendLoses")}</span>
         <span>
-          <i>prévu</i> · <Check className="inline size-3.5 align-[-0.15em]" aria-hidden="true" /> joué
+          <i>{t("tournament.legendPlanned")}</i> · <Check className="inline size-3.5 align-[-0.15em]" aria-hidden="true" />{" "}
+          {t("tournament.legendPlayed")}
         </span>
       </div>
-      <div role="group" aria-label="Afficher à partir du tour" className="flex flex-wrap items-center gap-1.5">
-        <span className="micro-label mr-1">Depuis</span>
+      <div role="group" aria-label={t("tournament.showFrom")} className="flex flex-wrap items-center gap-1.5">
+        <span className="micro-label mr-1">{t("tournament.since")}</span>
         {data.rounds.slice(0, -1).map((r, i) => (
           <ChipButton key={r.id} on={i === from} onClick={() => setFrom(i)}>
-            {r.name}
+            {roundName(r.name)}
           </ChipButton>
         ))}
       </div>
@@ -1021,21 +1031,21 @@ function LockBlock({ round, planned = false, points }: { round: Round; planned?:
   const hurry = !planned && ms > 0 && ms < 3_600_000
   return (
     <Box className={cn("scoreboard px-4 pt-4", hurry ? "pb-1" : "pb-4")}>
-      <span className="micro-label">{round.name} · verrouillage {planned ? "prévu " : ""}dans</span>
+      <span className="micro-label">{t(planned ? "tournament.lockInPlanned" : "tournament.lockIn", { round: roundName(round.name) })}</span>
       {hurry ? (
         <ShotClock ms={ms} className="mt-2" />
       ) : (
         <p className="scoreboard-digits mt-1 font-num text-4xl leading-tight tabular-nums">{formatLeft(ms)}</p>
       )}
       <p className="mt-1 text-sm text-chalk/85">
-        Heure locale : {formatDate(round.locks_at, true)}
-        {planned && " · suit le programme, peut avancer"}
-        {points != null && ` · tour gagné : +${points} pts`}
+        {t("tournament.localTime", { date: formatDate(round.locks_at, true) })}
+        {planned && t("tournament.plannedNote")}
+        {points != null && t("tournament.roundWonPts", { n: points })}
       </p>
       <p className="mt-1 text-xs text-chalk/80">
         {round.idx === 1
-          ? "Se verrouille au premier match du tournoi, même si ton joueur joue plus tard. Le pronostic du vainqueur aussi."
-          : "Se verrouille au premier match de ce tour, même si ton joueur joue plus tard."}
+          ? t("tournament.lockFirst")
+          : t("tournament.lockRound")}
       </p>
       {hurry && <BallBoyRun className="mt-1" />}
     </Box>
@@ -1062,7 +1072,7 @@ function Leaderboard({ data, d, uid }: { data: Data; d: Derived; uid?: string })
         trail: d.trail(e.id),
       }
     })
-    .sort((a, b) => Number(b.alive) - Number(a.alive) || b.survived - a.survived || a.name.localeCompare(b.name, "fr"))
+    .sort((a, b) => Number(b.alive) - Number(a.alive) || b.survived - a.survived || a.name.localeCompare(b.name, locale()))
 
   // Competition ranking: equal (alive, rounds survived) share a rank.
   const ranks = rows.map((_, i) => i)
@@ -1098,13 +1108,13 @@ function Leaderboard({ data, d, uid }: { data: Data; d: Derived; uid?: string })
         r.trail.some((s) => s.player?.name.toLowerCase().includes(needle)),
     )
 
-  if (total === 0) return <Empty>Personne n'est encore inscrit.</Empty>
+  if (total === 0) return <Empty>{t("tournament.noEntries")}</Empty>
 
   return (
     <div className="space-y-6">
       <Box className="px-4 py-4">
         <div className="flex items-baseline justify-between">
-          <span className="micro-label">Encore en vie</span>
+          <span className="micro-label">{t("tournament.stillAlive")}</span>
           <span className="font-num text-3xl tabular-nums">
             {aliveCount}
             <span className="text-lg text-chalk/80"> / {total}</span>
@@ -1112,7 +1122,7 @@ function Leaderboard({ data, d, uid }: { data: Data; d: Derived; uid?: string })
         </div>
         {funnel.length > 0 && (
           <ol className="mt-4 space-y-1.5 border-t-2 border-chalk/50 pt-4">
-            {[{ label: "Inscrits", n: total }, ...funnel.map((f) => ({ label: f.r.name, n: f.n }))].map((f) => (
+            {[{ label: t("tournament.funnelEntries"), n: total }, ...funnel.map((f) => ({ label: roundName(f.r.name), n: f.n }))].map((f) => (
               <li key={f.label} className="flex items-center gap-3 text-xs font-bold [font-stretch:85%]">
                 <span className="w-14 shrink-0 tracking-[0.08em] uppercase">{f.label}</span>
                 <span className="h-2.5 flex-1 bg-brick/50">
@@ -1126,14 +1136,14 @@ function Leaderboard({ data, d, uid }: { data: Data; d: Derived; uid?: string })
       </Box>
 
       <Segmented
-        label="Affichage du classement"
+        label={t("tournament.boardView")}
         value={view}
         onChange={setView}
         options={[
-          ["list", "Liste"],
-          ["grid", "Grille"],
-          ["dist", "Répartition"],
-          ["stats", "Stats"],
+          ["list", t("tournament.viewList")],
+          ["grid", t("tournament.viewGrid")],
+          ["dist", t("tournament.viewDist")],
+          ["stats", t("tournament.viewStats")],
         ]}
       />
 
@@ -1144,7 +1154,7 @@ function Leaderboard({ data, d, uid }: { data: Data; d: Derived; uid?: string })
       {(view === "list" || view === "grid") && (
         <div className="flex gap-2">
           <div className="flex-1">
-            <SearchInput value={q} onChange={setQ} placeholder="Pseudo ou joueur" />
+            <SearchInput value={q} onChange={setQ} placeholder={t("tournament.searchBoard")} />
           </div>
           {myIdx >= 0 && view === "list" && <FindMe onFind={() => setQ("")} />}
         </div>
@@ -1179,16 +1189,16 @@ function Leaderboard({ data, d, uid }: { data: Data; d: Derived; uid?: string })
                   <span className="flex min-w-0 flex-1 items-center gap-1.5">
                     <span className="min-w-0 truncate font-medium">
                       {r.name}
-                      {me && <span className="ml-1.5 text-xs opacity-75">(moi)</span>}
+                      {me && <span className="ml-1.5 text-xs opacity-75">{t("tournament.me")}</span>}
                     </span>
                     {!r.e.profiles?.deleted_at && <SocialIcons p={r.e.profiles} />}
                   </span>
                   {isWinner(r) ? (
-                    <Tag tone="win">{winnerCount > 1 ? "Co-vainqueur" : "Vainqueur"}</Tag>
+                    <Tag tone="win">{winnerCount > 1 ? t("tournament.coWinner") : t("tournament.winner")}</Tag>
                   ) : r.alive ? (
-                    <Tag tone="alive">En vie</Tag>
+                    <Tag tone="alive">{t("tournament.alive")}</Tag>
                   ) : (
-                    <Tag tone="out">Éliminé · {d.roundByIdx.get(r.out!)?.name}</Tag>
+                    <Tag tone="out">{t("tournament.outAt", { round: roundName(d.roundByIdx.get(r.out!)?.name ?? "") })}</Tag>
                   )}
                 </div>
                 {r.trail.length > 0 && (
@@ -1200,7 +1210,7 @@ function Leaderboard({ data, d, uid }: { data: Data; d: Derived; uid?: string })
                 )}
                 {on && d.championOf.has(r.e.id) && (
                   <p className="mt-2 flex flex-wrap items-center gap-x-2 pl-9 text-xs">
-                    <span className="text-chalk/85">Pronostic du vainqueur :</span>
+                    <span className="text-chalk/85">{t("tournament.championColon")}</span>
                     <span className="font-bold">
                       <PlayerName p={d.playerById.get(d.championOf.get(r.e.id)!)} />
                     </span>
@@ -1211,7 +1221,7 @@ function Leaderboard({ data, d, uid }: { data: Data; d: Derived; uid?: string })
             </li>
           )
         })}
-        {shown.length === 0 && <li className="px-3 py-4 text-sm text-chalk/80">Aucun résultat.</li>}
+        {shown.length === 0 && <li className="px-3 py-4 text-sm text-chalk/80">{t("tournament.noResults")}</li>}
       </ul>}
     </div>
   )
@@ -1250,6 +1260,17 @@ function Segmented<T extends string>({
   )
 }
 
+/** 1 -> "1er" / "1st" / "1.º": the ordinal suffix from the language's ordinal plural rules. */
+const ORDINAL: Record<Intl.LDMLPluralRule, MsgKey> = {
+  zero: "tournament.ordOther",
+  one: "tournament.ordOne",
+  two: "tournament.ordTwo",
+  few: "tournament.ordFew",
+  many: "tournament.ordOther",
+  other: "tournament.ordOther",
+}
+const ordinal = (n: number) => `${n}${t(ORDINAL[new Intl.PluralRules(locale(), { type: "ordinal" }).select(n)])}`
+
 /** "Carlos Alcaraz" -> "Alcaraz". */
 const shortName = (name: string) => name.trim().split(/\s+/).pop() ?? name
 
@@ -1274,8 +1295,8 @@ function Grid({
   rows: { e: EntryRow; name: string; out: number | null }[]
   uid?: string
 }) {
-  if (rounds.length === 0) return <Empty>La grille apparaît quand le premier tour est verrouillé.</Empty>
-  if (rows.length === 0) return <Empty>Aucun résultat.</Empty>
+  if (rounds.length === 0) return <Empty>{t("tournament.gridEmpty")}</Empty>
+  if (rows.length === 0) return <Empty>{t("tournament.noResults")}</Empty>
 
   return (
     <div className="relative overflow-x-auto overscroll-x-contain border-2 border-chalk/90">
@@ -1283,7 +1304,7 @@ function Grid({
         <thead>
           <tr className="border-b-2 border-chalk/90">
             <th scope="col" className="sticky left-0 z-10 clay-surface border-r-2 border-chalk/90 px-3 py-2">
-              <span className="micro-label">Pseudo</span>
+              <span className="micro-label">{t("tournament.username")}</span>
             </th>
             {rounds.map((r) => (
               <th
@@ -1291,7 +1312,7 @@ function Grid({
                 scope="col"
                 className="border-l-2 border-chalk/40 px-2 py-2 text-[11px] font-bold tracking-[0.1em] whitespace-nowrap uppercase [font-stretch:85%]"
               >
-                {r.name}
+                {roundName(r.name)}
               </th>
             ))}
           </tr>
@@ -1322,7 +1343,7 @@ function Grid({
                   return (
                     <td
                       key={r.id}
-                      title={`${r.name} · ${player?.name ?? CHIP_LABEL[state]}`}
+                      title={`${roundName(r.name)} · ${player?.name ?? t(CHIP_LABEL[state])}`}
                       className={cn("border-l-2 border-chalk/40 px-2 py-2 whitespace-nowrap", CELL_STYLE[state])}
                     >
                       {player ? (
@@ -1331,11 +1352,11 @@ function Grid({
                           {shortName(player.name)}
                         </span>
                       ) : state === "waived" ? (
-                        "repêché"
+                        t("tournament.chipWaived")
                       ) : (
                         "–"
                       )}
-                      <span className="sr-only"> · {CHIP_LABEL[state]}</span>
+                      <span className="sr-only"> · {t(CHIP_LABEL[state])}</span>
                     </td>
                   )
                 })}
@@ -1350,7 +1371,7 @@ function Grid({
 
 /** Per locked round: how many entries picked each player. */
 function Distribution({ d, rounds }: { d: Derived; rounds: Round[] }) {
-  if (rounds.length === 0) return <Empty>La répartition apparaît quand le premier tour est verrouillé.</Empty>
+  if (rounds.length === 0) return <Empty>{t("tournament.distEmpty")}</Empty>
 
   return (
     <div className="space-y-4">
@@ -1364,13 +1385,11 @@ function Distribution({ d, rounds }: { d: Derived; rounds: Round[] }) {
         return (
           <Box key={r.id} className="px-4 py-4">
             <div className="flex items-baseline justify-between gap-3">
-              <h3 className="font-display text-xl leading-tight">{r.name}</h3>
-              <span className="micro-label">
-                {total} choix
-              </span>
+              <h3 className="font-display text-xl leading-tight">{roundName(r.name)}</h3>
+              <span className="micro-label">{t("tournament.picksCount", { count: total })}</span>
             </div>
             {list.length === 0 ? (
-              <p className="mt-3 border-t-2 border-chalk/50 pt-3 text-sm text-chalk/80">Aucun choix pour ce tour.</p>
+              <p className="mt-3 border-t-2 border-chalk/50 pt-3 text-sm text-chalk/80">{t("tournament.noPicksRound")}</p>
             ) : (
               <ol className="mt-3 space-y-2 border-t-2 border-chalk/50 pt-3">
                 {list.map(({ p, pid, n, lost }) => (
@@ -1378,10 +1397,10 @@ function Distribution({ d, rounds }: { d: Derived; rounds: Round[] }) {
                     <div className="flex items-baseline justify-between gap-3">
                       <span className={cn("min-w-0 flex-1 font-medium", lost && "text-chalk/65 line-through")}>
                         <PlayerName p={p} />
-                        {lost && <span className="sr-only"> (éliminé)</span>}
+                        {lost && <span className="sr-only">{t("tournament.outSr")}</span>}
                       </span>
                       <span className="shrink-0 text-xs font-bold tabular-nums">
-                        {n} · {Math.round((n / total) * 100)} %
+                        {n} · {t("tournament.percent", { n: Math.round((n / total) * 100) })}
                       </span>
                     </div>
                     <span className="mt-1 block h-2.5 bg-brick/50">
@@ -1415,7 +1434,7 @@ function Stats({
   myRank: { rank: number; tied: boolean } | null
   total: number
 }) {
-  if (rounds.length === 0) return <Empty>Les stats apparaissent quand le premier tour est verrouillé.</Empty>
+  if (rounds.length === 0) return <Empty>{t("tournament.statsEmpty")}</Empty>
 
   const nameOf = new Map(data.entries.map((e) => [e.id, displayName(e.profiles)]))
   const pct = (n: number, of: number) => (of ? Math.round((n / of) * 100) : 0)
@@ -1448,68 +1467,70 @@ function Stats({
     <div className="space-y-4">
       {myRank && (
         <Box className="px-4 py-4">
-          <span className="micro-label">Mon classement</span>
+          <span className="micro-label">{t("tournament.myRanking")}</span>
           <p className="mt-1 font-display text-3xl leading-tight">
-            Tu es {myRank.rank}
-            {myRank.rank === 1 ? "er" : "e"}
-            {myRank.tied && " ex æquo"} <span className="text-lg text-chalk/85">sur {total}</span>
+            {t("tournament.youAre", { rank: ordinal(myRank.rank) })}
+            {myRank.tied && t("tournament.tied")}{" "}
+            <span className="text-lg text-chalk/85">{t("tournament.outOf", { total })}</span>
           </p>
         </Box>
       )}
 
       <Box className="px-4 py-4">
-        <span className="micro-label">Choix le plus audacieux</span>
+        <span className="micro-label">{t("tournament.boldest")}</span>
         {bold ? (
           <>
             <p className="mt-1 font-display text-2xl leading-tight">{player(bold.pid)}</p>
             <p className="mt-1 text-sm text-chalk/90">
-              {bold.r.name} · qualifié, choisi par {bold.entries.length} seulement :{" "}
-              {bold.entries.map((id) => nameOf.get(id)).join(", ")}
+              {t("tournament.boldLine", {
+                round: roundName(bold.r.name),
+                count: bold.entries.length,
+                names: bold.entries.map((id) => nameOf.get(id)).join(", "),
+              })}
             </p>
           </>
         ) : (
-          <p className="mt-1 text-sm text-chalk/85">Aucun joueur choisi ne s'est encore qualifié.</p>
+          <p className="mt-1 text-sm text-chalk/85">{t("tournament.noBold")}</p>
         )}
       </Box>
 
       <Box className="px-4 py-4">
-        <span className="micro-label">Plus grosse surprise</span>
+        <span className="micro-label">{t("tournament.upset")}</span>
         {upset ? (
           <>
             <p className="mt-1 font-display text-2xl leading-tight">{player(upset.pid)}</p>
             <p className="mt-1 text-sm text-chalk/90">
-              {upset.r.name} · battu, {upset.entries.length}{" "}
-              {upset.entries.length > 1 ? "inscrits éliminés d'un coup" : "inscrit éliminé"}
+              {t("tournament.upsetLine", { round: roundName(upset.r.name), count: upset.entries.length })}
             </p>
           </>
         ) : (
-          <p className="mt-1 text-sm text-chalk/85">Aucun joueur choisi n'a encore perdu.</p>
+          <p className="mt-1 text-sm text-chalk/85">{t("tournament.noUpset")}</p>
         )}
       </Box>
 
       <Box className="px-4 py-4">
-        <span className="micro-label">Tour par tour</span>
+        <span className="micro-label">{t("tournament.roundByRound")}</span>
         <ol className="mt-3 space-y-4 border-t-2 border-chalk/50 pt-3">
           {perRound.map(({ r, n, top, entering, survived, pending }) => (
             <li key={r.id} className="text-sm">
-              <h3 className="font-display text-xl leading-tight">{r.name}</h3>
+              <h3 className="font-display text-xl leading-tight">{roundName(r.name)}</h3>
               <p className="mt-1">
-                <span className="text-chalk/85">Le plus choisi : </span>
+                <span className="text-chalk/85">{t("tournament.mostPicked")}</span>
                 {top ? (
                   <strong className="font-bold">
-                    {player(top.pid)} · {top.entries.length} ({pct(top.entries.length, n)} %)
+                    {player(top.pid)} · {top.entries.length} ({t("tournament.percent", { n: pct(top.entries.length, n) })})
                   </strong>
                 ) : (
-                  "aucun choix"
+                  t("tournament.chipMissing")
                 )}
               </p>
               <div className="mt-1.5 flex items-center gap-3 text-xs font-bold [font-stretch:85%]">
-                <span className="w-14 shrink-0 tracking-[0.08em] uppercase">Survie</span>
+                <span className="w-14 shrink-0 tracking-[0.08em] uppercase">{t("tournament.survival")}</span>
                 <span className="h-2.5 flex-1 bg-brick/50">
                   <span className="block h-full bg-chalk" style={{ width: `${pending ? 0 : pct(survived, entering)}%` }} />
                 </span>
                 <span className="shrink-0 text-right tabular-nums">
-                  {pending ? "en attente" : `${survived}/${entering} · ${pct(survived, entering)} %`}
+                  {pending ? t("tournament.chipPending") : `${survived}/${entering} · ${t("tournament.percent", { n: pct(survived, entering) })}`}
                 </span>
               </div>
             </li>
@@ -1533,16 +1554,16 @@ function Draw({ data, d }: { data: Data; d: Derived }) {
   const [open, setOpen] = useState<string | null>(null)
   const [from, setFrom] = useState(0)
   const round = data.rounds.find((r) => r.id === roundId) ?? fallback
-  if (!round) return <Empty>Le tableau n'est pas encore publié.</Empty>
+  if (!round) return <Empty>{t("tournament.drawNotPublished")}</Empty>
 
   const toggle = (
     <Segmented
-      label="Affichage du tableau"
+      label={t("tournament.drawView")}
       value={view}
       onChange={setView}
       options={[
-        ["list", "Liste"],
-        ["tree", "Arbre"],
+        ["list", t("tournament.viewList")],
+        ["tree", t("tournament.viewTree")],
       ]}
     />
   )
@@ -1551,14 +1572,14 @@ function Draw({ data, d }: { data: Data; d: Derived }) {
       <div className="space-y-4">
         {toggle}
         {data.matches.length === 0 ? (
-          <Empty>Les matchs ne sont pas encore publiés.</Empty>
+          <Empty>{t("tournament.noMatches")}</Empty>
         ) : (
           <>
-            <div role="group" aria-label="Afficher à partir du tour" className="flex flex-wrap items-center gap-1.5">
-              <span className="micro-label mr-1">Depuis</span>
+            <div role="group" aria-label={t("tournament.showFrom")} className="flex flex-wrap items-center gap-1.5">
+              <span className="micro-label mr-1">{t("tournament.since")}</span>
               {data.rounds.slice(0, -1).map((r, i) => (
                 <ChipButton key={r.id} on={i === from} onClick={() => setFrom(i)}>
-                  {r.name}
+                  {roundName(r.name)}
                 </ChipButton>
               ))}
             </div>
@@ -1588,10 +1609,10 @@ function Draw({ data, d }: { data: Data; d: Derived }) {
   const count = (f: DrawFilter) => (f === "all" ? inRound.length : inRound.filter((x) => keyOf(x.res) === f).length)
   const shown = inRound.filter((x) => filter === "all" || keyOf(x.res) === filter)
   const filters: [DrawFilter, string][] = [
-    ["all", "Tous"],
-    ["todo", "À jouer"],
-    ["won", "Qualifiés"],
-    ["lost", "Éliminés"],
+    ["all", t("tournament.filterAll")],
+    ["todo", t("tournament.filterTodo")],
+    ["won", t("tournament.filterWon")],
+    ["lost", t("tournament.filterLost")],
   ]
 
   return (
@@ -1600,18 +1621,18 @@ function Draw({ data, d }: { data: Data; d: Derived }) {
       <div className="flex flex-wrap gap-1.5">
         {data.rounds.map((r) => (
           <ChipButton key={r.id} on={r.id === round.id} onClick={() => setRoundId(r.id)}>
-            {r.name}
+            {roundName(r.name)}
           </ChipButton>
         ))}
       </div>
       <p className="text-xs text-chalk/85">
-        {inRound.length} {inRound.length > 1 ? "joueurs" : "joueur"} · verrouillage {formatDate(round.locks_at, true)}
+        {t("tournament.drawCount", { count: inRound.length, date: formatDate(round.locks_at, true) })}
       </p>
       {inRound.length === 0 ? (
-        <Empty>Aucun joueur qualifié pour ce tour pour l'instant.</Empty>
+        <Empty>{t("tournament.noQualified")}</Empty>
       ) : (
         <>
-          <div role="group" aria-label="Filtrer les joueurs" className="flex flex-wrap gap-1.5">
+          <div role="group" aria-label={t("tournament.filterPlayers")} className="flex flex-wrap gap-1.5">
             {filters.map(([f, label]) => (
               <ChipButton key={f} on={filter === f} onClick={() => setFilter(f)}>
                 {label} <span className="tabular-nums opacity-80">{count(f)}</span>
@@ -1619,7 +1640,7 @@ function Draw({ data, d }: { data: Data; d: Derived }) {
             ))}
           </div>
           {shown.length === 0 ? (
-            <Empty>Aucun joueur dans cette catégorie.</Empty>
+            <Empty>{t("tournament.noPlayerInFilter")}</Empty>
           ) : (
             <ul className="grid grid-cols-1 border-2 border-chalk/90 min-[520px]:grid-cols-2">
               {shown.map(({ p, res }) => (

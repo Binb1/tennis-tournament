@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n"
 import { THEMES } from "@/lib/theme"
 
 /**
@@ -10,12 +11,13 @@ export type Category = "atp250" | "atp500" | "masters1000" | "grand_slam"
 /**
  * `color`: the category's code colour, same on every court style (light tones, ink text, so they stand out on clay,
  * hard court, grass and indoor alike). Gets warmer and richer up the ladder: 250 mint, 500 sky, 1000 lilac, Slam gold.
+ * `label` / `short` are getters: read in the current language at call time.
  */
-export const CATEGORIES: { id: Category; label: string; short: string; mult: number; color: string }[] = [
-  { id: "atp250", label: "ATP 250", short: "250", mult: 2, color: "#a3e4c5" },
-  { id: "atp500", label: "ATP 500", short: "500", mult: 3, color: "#9fd0f5" },
-  { id: "masters1000", label: "Masters 1000", short: "1000", mult: 5, color: "#d2b8ff" },
-  { id: "grand_slam", label: "Grand Chelem", short: "GC", mult: 8, color: "#f6c945" },
+export const CATEGORIES: { id: Category; readonly label: string; readonly short: string; mult: number; color: string }[] = [
+  { id: "atp250", get label() { return t("category.atp250") }, short: "250", mult: 2, color: "#a3e4c5" },
+  { id: "atp500", get label() { return t("category.atp500") }, short: "500", mult: 3, color: "#9fd0f5" },
+  { id: "masters1000", get label() { return t("category.masters1000") }, short: "1000", mult: 5, color: "#d2b8ff" },
+  { id: "grand_slam", get label() { return t("category.grandSlam") }, get short() { return t("category.grandSlamShort") }, mult: 8, color: "#f6c945" },
 ]
 
 export const BONUS = 10

@@ -4,12 +4,11 @@ import { Link } from "react-router-dom"
 import { AppShell, Box, ErrorBox, FindMe, Loading, ME_ROW, PageTitle, SearchInput } from "@/components/court/AppShell"
 import { ClimbArrow, PixelPodium } from "@/components/pixel/Animations"
 import { useAuth } from "@/lib/auth"
-import { fetchLastReset, fetchSeasons, rankSeason, seasonsOf, type SeasonRow } from "@/lib/season"
+import { t } from "@/lib/i18n"
+import { fetchLastReset, fetchSeasons, rankSeason, rankSuffix, seasonsOf, type SeasonRow } from "@/lib/season"
 import { readSeen, writeSeen } from "@/lib/seen"
 import { displayName, formatDate } from "@/lib/supabase"
 import { cn } from "@/lib/utils"
-
-const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`
 
 export default function Season() {
   const { session } = useAuth()
@@ -64,16 +63,16 @@ export default function Season() {
 
   return (
     <AppShell>
-      <PageTitle eyebrow="Classement général">Saison {season}</PageTitle>
+      <PageTitle eyebrow={t("season.eyebrow")}>{t("season.title", { year: season })}</PageTitle>
       <p className="-mt-2 mb-6 text-sm text-chalk/85">
-        Plus le tour est avancé et le tournoi prestigieux, plus il rapporte.{" "}
+        {t("season.intro")}{" "}
         <Link to="/points" className="underline underline-offset-4">
-          Comment marquer des points
+          {t("season.howToScore")}
         </Link>
       </p>
       {resetAt && new Date(resetAt).getFullYear() === season && (
         <p className="-mt-3 mb-6 border-l-4 border-chalk bg-brick/40 px-4 py-3 text-sm">
-          Points remis à zéro le {formatDate(resetAt)} : seuls les tours verrouillés depuis comptent.
+          {t("season.resetNote", { date: formatDate(resetAt) })}
         </p>
       )}
 
@@ -100,31 +99,31 @@ export default function Season() {
       {rows && me && (
         <Box className="mb-6 flex items-end justify-between gap-4 px-4 py-4">
           <div>
-            <span className="micro-label">Ma place</span>
+            <span className="micro-label">{t("season.myRank")}</span>
             <p className="mt-1 font-display text-4xl leading-none tabular-nums">
               {me.rank}
-              <span className="text-xl">{me.rank === 1 ? "er" : "e"}</span>
-              {me.tied && <span className="ml-2 align-middle text-sm font-sans">ex æquo</span>}
+              <span className="text-xl">{rankSuffix(me.rank)}</span>
+              {me.tied && <span className="ml-2 align-middle text-sm font-sans">{t("season.tied")}</span>}
               {climb > 0 && (
                 <span className="ml-2 inline-flex items-center gap-1 align-middle font-sans text-sm font-bold">
                   <ClimbArrow />+{climb}
                 </span>
               )}
             </p>
-            <p className="mt-1 text-sm text-chalk/85">sur {plural(ranked.length, "joueur", "joueurs")}</p>
+            <p className="mt-1 text-sm text-chalk/85">{t("season.outOf", { count: ranked.length })}</p>
           </div>
           <div className="text-right">
             <p className="font-display text-4xl leading-none tabular-nums">{me.points}</p>
-            <p className="mt-1 text-sm text-chalk/85">points</p>
+            <p className="mt-1 text-sm text-chalk/85">{t("season.points")}</p>
           </div>
         </Box>
       )}
 
       {rows && ranked.length === 0 && (
         <p className="border-2 border-dashed border-chalk/60 px-4 py-6 text-center text-chalk/90">
-          Pas encore de points cette saison.{" "}
+          {t("season.noPoints")}{" "}
           <Link to="/tournois" className="inline-block py-3 underline underline-offset-4">
-            Voir les tournois
+            {t("season.seeTournaments")}
           </Link>
         </p>
       )}
@@ -141,14 +140,14 @@ export default function Season() {
       {ranked.length > 0 && (
         <div className="mb-3 flex gap-2">
           <div className="flex-1">
-            <SearchInput value={q} onChange={setQ} placeholder="Chercher un pseudo" />
+            <SearchInput value={q} onChange={setQ} placeholder={t("season.search")} />
           </div>
           {me && <FindMe onFind={() => setQ("")} />}
         </div>
       )}
 
       {ranked.length > 0 && shown.length === 0 && (
-        <p className="border-2 border-dashed border-chalk/60 px-4 py-6 text-center text-chalk/90">Aucun joueur trouvé.</p>
+        <p className="border-2 border-dashed border-chalk/60 px-4 py-6 text-center text-chalk/90">{t("season.noneFound")}</p>
       )}
 
       {shown.length > 0 && (
@@ -172,16 +171,16 @@ export default function Season() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">
                     {displayName(r)}
-                    {mine && <span className="ml-1.5 text-xs opacity-75">(moi)</span>}
+                    {mine && <span className="ml-1.5 text-xs opacity-75">{t("season.me")}</span>}
                   </p>
                   <p className="text-xs text-chalk/80">
-                    {plural(r.rounds_won, "tour gagné", "tours gagnés")} · {plural(r.tournaments_played, "tournoi", "tournois")}
-                    {r.tournaments_won > 0 && ` · ${plural(r.tournaments_won, "titre", "titres")}`}
+                    {t("season.roundsWon", { count: r.rounds_won })} · {t("season.tournaments", { count: r.tournaments_played })}
+                    {r.tournaments_won > 0 && ` · ${t("season.titles", { count: r.tournaments_won })}`}
                   </p>
                 </div>
                 <span className="shrink-0 text-right">
                   <span className="font-display text-2xl tabular-nums">{r.points}</span>
-                  <span className="ml-1 text-xs text-chalk/80">pts</span>
+                  <span className="ml-1 text-xs text-chalk/80">{t("season.pts")}</span>
                 </span>
               </li>
             )

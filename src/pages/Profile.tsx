@@ -5,6 +5,7 @@ import { ChevronRight } from "lucide-react"
 import { AppShell, Box, ChalkButton, ErrorBox, LineButton, Loading, PageTitle, ResultTag, Tag } from "@/components/court/AppShell"
 import { Flag } from "@/components/court/PlayerLabel"
 import { useAuth } from "@/lib/auth"
+import { dbError, roundName, t } from "@/lib/i18n"
 import {
   displayName,
   fetchLastPicks,
@@ -16,7 +17,7 @@ import {
   type Tournament,
 } from "@/lib/supabase"
 import { MyState } from "@/pages/Tournaments"
-import { fetchSeasons, rankSeason, seasonsOf, type EntryPoints, type Ranked } from "@/lib/season"
+import { fetchSeasons, rankOrdinal, rankSeason, seasonsOf, type EntryPoints, type Ranked } from "@/lib/season"
 import { HandleField, SocialLinks, parseSocials } from "@/components/court/Socials"
 
 /** Public X / Instagram handles: shown as links, editable in place. */
@@ -56,7 +57,7 @@ function SocialsEditor() {
       <div className="mt-2 flex flex-wrap items-center gap-x-5">
         <SocialLinks p={profile} />
         <button onClick={open} className="min-h-11 text-sm text-chalk/85 underline underline-offset-4 hover:text-chalk">
-          {hasAny ? "Modifier mes réseaux" : "Ajouter X / Instagram"}
+          {hasAny ? t("profile.editSocials") : t("profile.addSocials")}
         </button>
       </div>
     )
@@ -64,22 +65,22 @@ function SocialsEditor() {
   return (
     <form onSubmit={save} className="mt-4 space-y-4">
       <div className="grid grid-cols-2 gap-4">
-        <HandleField label="X (Twitter)" placeholder="facultatif" value={form.x} onChange={(e) => setForm({ ...form, x: e.target.value })} />
+        <HandleField label="X (Twitter)" placeholder={t("profile.optional")} value={form.x} onChange={(e) => setForm({ ...form, x: e.target.value })} />
         <HandleField
           label="Instagram"
-          placeholder="facultatif"
+          placeholder={t("profile.optional")}
           value={form.instagram}
           onChange={(e) => setForm({ ...form, instagram: e.target.value })}
         />
       </div>
-      <p className="text-xs text-chalk/75">Public : un lien apparaît à côté de ton pseudo dans les classements. Laisse vide pour retirer.</p>
+      <p className="text-xs text-chalk/75">{t("profile.socialsHint")}</p>
       {error && <ErrorBox message={error} />}
       <div className="grid grid-cols-2 gap-3">
         <LineButton type="button" onClick={() => setEditing(false)} disabled={saving}>
-          Annuler
+          {t("profile.cancel")}
         </LineButton>
         <ChalkButton type="submit" disabled={saving}>
-          {saving ? "Enregistrement…" : "Enregistrer"}
+          {saving ? t("profile.saving") : t("profile.save")}
         </ChalkButton>
       </div>
     </form>
@@ -155,7 +156,7 @@ export default function Profile() {
     const { error } = await supabase.rpc("delete_my_account")
     if (error) {
       setDeleting(false)
-      setDeleteError(error.message)
+      setDeleteError(dbError(error.message))
       return
     }
     await signOut()
@@ -163,7 +164,7 @@ export default function Profile() {
 
   return (
     <AppShell>
-      <PageTitle eyebrow="Profil">{displayName(profile)}</PageTitle>
+      <PageTitle eyebrow={t("profile.eyebrow")}>{displayName(profile)}</PageTitle>
       <p className="-mt-2 text-sm text-chalk/85">{session?.user.email}</p>
       <div className="mb-8">
         <SocialsEditor />
@@ -172,39 +173,42 @@ export default function Profile() {
       {season && season.mine.length > 0 && <MySeasons mine={season.mine} players={season.players} />}
 
       <section className="mb-10">
-        <h2 className="micro-label mb-3">Mes tournois</h2>
+        <h2 className="micro-label mb-3">{t("profile.myTournaments")}</h2>
         {error && <ErrorBox message={error} />}
         {!rows && !error && <Loading />}
         {rows && rows.length === 0 && (
           <p className="border-2 border-dashed border-chalk/60 px-4 py-6 text-center text-chalk/90">
-            Aucun tournoi pour l'instant. <Link to="/tournois" className="inline-block py-3 underline underline-offset-4">Voir les tournois</Link>
+            {t("profile.empty")}{" "}
+            <Link to="/tournois" className="inline-block py-3 underline underline-offset-4">
+              {t("profile.seeTournaments")}
+            </Link>
           </p>
         )}
         {rows && rows.length > 0 && (
           <ul className="border-2 border-chalk/90">
             {rows.map((r) => {
-              const t = r.tournaments
+              const tn = r.tournaments
               const s = statuses[r.id]
               const last = lastPicks[r.id]
-              if (!t) return null
+              if (!tn) return null
               return (
                 <li key={r.id} className="border-t-2 border-chalk/50 first:border-t-0">
-                  <Link to={`/tournois/${t.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-chalk/10">
+                  <Link to={`/tournois/${tn.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-chalk/10">
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">
-                        <Flag code={t.country} className="mr-1.5" />
-                        {t.name}
+                        <Flag code={tn.country} className="mr-1.5" />
+                        {tn.name}
                       </p>
                       <p className="text-xs text-chalk/80">
-                        {formatDate(t.starts_at)}
-                        {s && s.rounds_survived > 0 && ` · ${s.rounds_survived} ${s.rounds_survived > 1 ? "tours passés" : "tour passé"}`}
+                        {formatDate(tn.starts_at)}
+                        {s && s.rounds_survived > 0 && ` · ${t("profile.roundsPassed", { count: s.rounds_survived })}`}
                         {entryPoints[r.id] && (
                           <strong className="font-bold text-chalk"> · {entryPoints[r.id].points} pts</strong>
                         )}
                       </p>
                       {last && (
                         <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs">
-                          <span className="text-chalk/85">Ton choix · {last.roundName} :</span>
+                          <span className="text-chalk/85">{t("profile.yourPick", { round: roundName(last.roundName) })}</span>
                           <span className="inline-flex items-center gap-1 font-bold">
                             <Flag code={last.country} />
                             {last.player}
@@ -213,7 +217,7 @@ export default function Profile() {
                         </p>
                       )}
                     </div>
-                    {s ? <MyState status={t.status} me={s} winner={winners.has(r.id)} /> : <Tag tone="neutral">Inscrit</Tag>}
+                    {s ? <MyState status={tn.status} me={s} winner={winners.has(r.id)} /> : <Tag tone="neutral">{t("profile.joined")}</Tag>}
                     <ChevronRight className="size-4 shrink-0 text-chalk/70" />
                   </Link>
                 </li>
@@ -224,20 +228,19 @@ export default function Profile() {
       </section>
 
       <LineButton onClick={signOut} className="w-full">
-        Se déconnecter
+        {t("profile.signOut")}
       </LineButton>
 
       <section className="mt-12 border-t-2 border-chalk/60 pt-6">
         {!confirming ? (
           <button onClick={() => setConfirming(true)} className="min-h-11 text-sm font-medium underline underline-offset-4">
-            Supprimer mon compte
+            {t("profile.deleteAccount")}
           </button>
         ) : (
           <Box className="border-chalk bg-brick/60 px-4 py-4">
-            <p className="font-display text-xl">Supprimer ton compte ?</p>
+            <p className="font-display text-xl">{t("profile.deleteTitle")}</p>
             <p className="mt-2 text-sm text-chalk/90">
-              Tes données personnelles (e-mail, classement, région, ville, pays) sont effacées. Tes participations restent
-              visibles sous le nom « utilisateur supprimé ». Cette action est définitive.
+              {t("profile.deleteText", { name: t("common.deletedUser") })}
             </p>
             {deleteError && (
               <div className="mt-3">
@@ -246,14 +249,14 @@ export default function Profile() {
             )}
             <div className="mt-4 grid grid-cols-2 gap-3">
               <LineButton onClick={() => setConfirming(false)} disabled={deleting}>
-                Annuler
+                {t("profile.cancel")}
               </LineButton>
               <button
                 onClick={deleteAccount}
                 disabled={deleting}
                 className="min-h-11 rounded-[2px] bg-ink px-4 text-[13px] font-bold tracking-[0.14em] text-chalk uppercase [font-stretch:85%] hover:bg-ink/85 disabled:opacity-60"
               >
-                {deleting ? "Suppression…" : "Supprimer"}
+                {deleting ? t("profile.deleting") : t("profile.delete")}
               </button>
             </div>
           </Box>
@@ -267,27 +270,39 @@ export default function Profile() {
 function MySeasons({ mine, players }: { mine: Ranked[]; players: Record<number, number> }) {
   const [cur, ...past] = mine
   const tiles = [
-    { label: "Classement", value: `${cur.rank}${cur.rank === 1 ? "er" : "e"}`, sub: `sur ${players[cur.season]}${cur.tied ? " · ex æquo" : ""}` },
-    { label: "Points", value: cur.points, sub: `dont ${cur.winner_bonus + cur.champion_bonus} de bonus` },
-    { label: "Tournois joués", value: cur.tournaments_played, sub: "tous comptent" },
-    { label: "Tours gagnés", value: cur.rounds_won, sub: `+${cur.round_points} pts` },
-    { label: "Tournois gagnés", value: cur.tournaments_won, sub: cur.tournaments_won > 0 ? `+${cur.winner_bonus} pts` : "dernier debout" },
-    { label: "Vainqueurs devinés", value: cur.champions_predicted, sub: cur.champions_predicted > 0 ? `+${cur.champion_bonus} pts` : "pronostic du titre" },
+    {
+      label: t("profile.ranking"),
+      value: rankOrdinal(cur.rank),
+      sub: `${t("profile.outOf", { count: players[cur.season] })}${cur.tied ? ` · ${t("profile.tied")}` : ""}`,
+    },
+    { label: t("profile.points"), value: cur.points, sub: t("profile.bonus", { n: cur.winner_bonus + cur.champion_bonus }) },
+    { label: t("profile.played"), value: cur.tournaments_played, sub: t("profile.allCount") },
+    { label: t("profile.roundsWon"), value: cur.rounds_won, sub: t("profile.plusPts", { n: cur.round_points }) },
+    {
+      label: t("profile.won"),
+      value: cur.tournaments_won,
+      sub: cur.tournaments_won > 0 ? t("profile.plusPts", { n: cur.winner_bonus }) : t("profile.lastStanding"),
+    },
+    {
+      label: t("profile.champions"),
+      value: cur.champions_predicted,
+      sub: cur.champions_predicted > 0 ? t("profile.plusPts", { n: cur.champion_bonus }) : t("profile.championHint"),
+    },
   ]
   return (
     <section className="mb-10">
       <div className="mb-3 flex items-baseline justify-between gap-3">
-        <h2 className="micro-label">Ma saison {cur.season}</h2>
+        <h2 className="micro-label">{t("profile.mySeason", { year: cur.season })}</h2>
         <Link to="/saison" className="text-sm underline underline-offset-4">
-          Classement
+          {t("profile.ranking")}
         </Link>
       </div>
       <div className="grid grid-cols-2 border-2 border-chalk/90">
-        {tiles.map((t, i) => (
-          <div key={t.label} className={`px-4 py-3 ${i % 2 ? "border-l-2 border-chalk/50" : ""} ${i > 1 ? "border-t-2 border-chalk/50" : ""}`}>
-            <span className="micro-label">{t.label}</span>
-            <p className="mt-1 font-display text-3xl leading-none tabular-nums">{t.value}</p>
-            <p className="mt-1 text-xs text-chalk/80">{t.sub}</p>
+        {tiles.map((tile, i) => (
+          <div key={tile.label} className={`px-4 py-3 ${i % 2 ? "border-l-2 border-chalk/50" : ""} ${i > 1 ? "border-t-2 border-chalk/50" : ""}`}>
+            <span className="micro-label">{tile.label}</span>
+            <p className="mt-1 font-display text-3xl leading-none tabular-nums">{tile.value}</p>
+            <p className="mt-1 text-xs text-chalk/80">{tile.sub}</p>
           </div>
         ))}
       </div>
@@ -295,8 +310,7 @@ function MySeasons({ mine, players }: { mine: Ranked[]; players: Record<number, 
         <ul className="mt-3 space-y-1 text-sm text-chalk/85">
           {past.map((s) => (
             <li key={s.season} className="tabular-nums">
-              Saison {s.season} · {s.rank}
-              {s.rank === 1 ? "er" : "e"} sur {players[s.season]} · {s.points} pts
+              {t("profile.pastSeason", { year: s.season, rank: rankOrdinal(s.rank), count: players[s.season], points: s.points })}
             </li>
           ))}
         </ul>

@@ -3,9 +3,11 @@ import { Link, NavLink } from "react-router-dom"
 import { Eye, EyeOff, ListOrdered, Search, Shield, Trophy, User, type LucideIcon } from "lucide-react"
 
 import { BallMark } from "@/components/court/BallMark"
+import { LangSwitch } from "@/components/court/LangSwitch"
 import { PixelLoader } from "@/components/pixel/Animations"
 import { SurfaceMenu } from "@/components/court/SurfacePicker"
 import { useAuth } from "@/lib/auth"
+import { t } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import "@/components/pixel/pixel.css"
 
@@ -18,10 +20,10 @@ import "@/components/pixel/pixel.css"
 export function AppShell({ children, bare = false, wide = false }: { children: ReactNode; bare?: boolean; wide?: boolean }) {
   const { profile } = useAuth()
   const items: [string, string, LucideIcon][] = [
-    ["/tournois", "Tournois", Trophy],
-    ["/saison", "Saison", ListOrdered],
-    ["/profil", "Profil", User],
-    ...(profile?.is_admin ? [["/admin", "Admin", Shield] as [string, string, LucideIcon]] : []),
+    ["/tournois", t("shell.navTournaments"), Trophy],
+    ["/saison", t("shell.navSeason"), ListOrdered],
+    ["/profil", t("shell.navProfile"), User],
+    ...(profile?.is_admin ? [["/admin", t("shell.navAdmin"), Shield] as [string, string, LucideIcon]] : []),
   ]
   return (
     // --tabbar: height of the phone tab bar, for sticky bars that must sit above it.
@@ -53,7 +55,7 @@ export function AppShell({ children, bare = false, wide = false }: { children: R
 function TabBar({ items }: { items: [string, string, LucideIcon][] }) {
   return (
     <nav
-      aria-label="Navigation"
+      aria-label={t("shell.navigation")}
       className="wall fixed inset-x-0 bottom-0 z-30 grid border-t-2 border-chalk/90 pb-[env(safe-area-inset-bottom)] md:hidden"
       style={{ gridTemplateColumns: `repeat(${items.length}, 1fr)` }}
     >
@@ -96,6 +98,7 @@ export function SiteHeader({ children, wide = false }: { children?: ReactNode; w
           </Link>
           <div className="flex items-center gap-2 min-[400px]:gap-3">
             {children}
+            <LangSwitch />
             <SurfaceMenu />
           </div>
         </div>
@@ -113,10 +116,10 @@ export function SiteFooter({ className }: { className?: string }) {
       <div className="wall flex h-16 items-center justify-center gap-4">
         <span className="font-brand text-sm leading-none opacity-45">Tiebreakers</span>
         <Link to="/regles" className="inline-flex min-h-11 items-center text-xs font-medium text-chalk/80 underline underline-offset-4 hover:text-chalk">
-          Règles du jeu
+          {t("shell.rules")}
         </Link>
         <Link to="/points" className="inline-flex min-h-11 items-center text-xs font-medium text-chalk/80 underline underline-offset-4 hover:text-chalk">
-          Points
+          {t("shell.points")}
         </Link>
       </div>
     </footer>
@@ -226,7 +229,7 @@ export function PasswordField({ label, hint, ...props }: Omit<ComponentProps<"in
           <button
             type="button"
             onClick={() => setVisible((v) => !v)}
-            aria-label={visible ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+            aria-label={visible ? t("shell.hidePassword") : t("shell.showPassword")}
             aria-pressed={visible}
             className="absolute inset-y-0 right-0 inline-flex w-12 items-center justify-center text-chalk/80 hover:text-chalk"
           >
@@ -266,23 +269,23 @@ export function FindMe({ onFind }: { onFind: () => void }) {
   }
   return (
     <LineButton onClick={find} className="shrink-0 px-3">
-      Me trouver
+      {t("shell.findMe")}
     </LineButton>
   )
 }
 
-export function Loading({ label = "Chargement…" }: { label?: string }) {
+export function Loading({ label = t("shell.loading") }: { label?: string }) {
   return <PixelLoader label={label} />
 }
 
-/** Inline error (RPC messages are already in French). */
+/** Inline error (RPC messages: pass them through lib/i18n dbError). */
 export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
     <div role="alert" className="flex items-start justify-between gap-3 border-l-4 border-chalk bg-brick/60 px-4 py-3 text-sm">
       <span>{message}</span>
       {onRetry && (
         <button onClick={onRetry} className="-my-3 min-h-11 shrink-0 font-bold underline underline-offset-4">
-          Réessayer
+          {t("shell.retry")}
         </button>
       )}
     </div>
@@ -328,7 +331,7 @@ export function ResultTag({ result }: { result: "won" | "lost" | null | undefine
           !result && "border border-chalk/80",
         )}
       />
-      {result === "won" ? "Qualifié" : result === "lost" ? "Éliminé" : "À jouer"}
+      {result === "won" ? t("shell.resultWon") : result === "lost" ? t("shell.resultLost") : t("shell.resultPending")}
     </span>
   )
 }

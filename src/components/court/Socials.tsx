@@ -1,5 +1,6 @@
 import type { ComponentProps } from "react"
 
+import { t } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { HANDLE_RE, instagramUrl, normaliseHandle, xUrl, type Socials } from "@/lib/supabase"
 
@@ -30,8 +31,8 @@ export function parseSocials(form: { x: string; instagram: string }):
   | { ok: false; error: string } {
   const x = normaliseHandle(form.x)
   const ig = normaliseHandle(form.instagram)
-  if (x && !HANDLE_RE.test(x)) return { ok: false, error: "Identifiant X invalide (lettres, chiffres, _ et . ; 30 max)." }
-  if (ig && !HANDLE_RE.test(ig)) return { ok: false, error: "Identifiant Instagram invalide (lettres, chiffres, _ et . ; 30 max)." }
+  if (x && !HANDLE_RE.test(x)) return { ok: false, error: t("socials.invalidX") }
+  if (ig && !HANDLE_RE.test(ig)) return { ok: false, error: t("socials.invalidInstagram") }
   return { ok: true, value: { x_handle: x, instagram_handle: ig } }
 }
 
@@ -66,7 +67,7 @@ export function SocialIcons({ p, className }: { p: Socials | null | undefined; c
   return (
     <span className={cn("inline-flex shrink-0 items-center gap-0.5", className)}>
       {p.x_handle && (
-        <a href={xUrl(p.x_handle)} target="_blank" rel="noopener noreferrer" aria-label={`X : @${p.x_handle}`} onClick={stop} onKeyDown={stop} className={link}>
+        <a href={xUrl(p.x_handle)} target="_blank" rel="noopener noreferrer" aria-label={t("socials.xLink", { handle: p.x_handle })} onClick={stop} onKeyDown={stop} className={link}>
           <XIcon className="size-3.5" />
         </a>
       )}
@@ -75,7 +76,7 @@ export function SocialIcons({ p, className }: { p: Socials | null | undefined; c
           href={instagramUrl(p.instagram_handle)}
           target="_blank"
           rel="noopener noreferrer"
-          aria-label={`Instagram : @${p.instagram_handle}`}
+          aria-label={t("socials.instagramLink", { handle: p.instagram_handle })}
           onClick={stop}
           onKeyDown={stop}
           className={link}

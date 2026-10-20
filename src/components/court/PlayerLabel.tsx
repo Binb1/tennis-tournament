@@ -1,4 +1,5 @@
 import { flagEmoji } from "@/lib/flags"
+import { locale, t } from "@/lib/i18n"
 import type { Match, Player } from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
@@ -19,7 +20,7 @@ export function Flag({ code, className }: { code?: string | null; className?: st
 
 /** Flag + name + small world ranking. The name truncates. */
 export function PlayerName({ p, className, rank = true }: { p?: Player | null; className?: string; rank?: boolean }) {
-  if (!p) return <span className={cn("min-w-0 truncate text-chalk/70 italic", className)}>à déterminer</span>
+  if (!p) return <span className={cn("min-w-0 truncate text-chalk/70 italic", className)}>{t("match.tbd")}</span>
   return (
     <span className={cn("flex min-w-0 items-center gap-1.5", className)}>
       <Flag code={p.country} />
@@ -33,9 +34,9 @@ export function PlayerName({ p, className, rank = true }: { p?: Player | null; c
 export function formatMatchTime(iso: string | null) {
   if (!iso) return null
   const d = new Date(iso)
-  const day = d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })
+  const day = d.toLocaleDateString(locale(), { weekday: "short", day: "numeric", month: "short" })
   if (d.getUTCHours() === 0 && d.getUTCMinutes() === 0) return day
-  return `${day} ${d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`
+  return `${day} ${d.toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit" })}`
 }
 
 /**
@@ -59,13 +60,14 @@ export function MatchLine({
   if (!m) return null
   const oppId = m.player1_id === pid ? m.player2_id : m.player1_id
   const opp = oppId ? playerById.get(oppId) : undefined
-  const oppLabel = opp ? `${opp.name}${opp.ranking ? ` (#${opp.ranking})` : ""}` : "à déterminer"
-  let text: string
+  const oppLabel = opp ? `${opp.name}${opp.ranking ? ` (#${opp.ranking})` : ""}` : t("match.tbd")
+  let parts: (string | null)[]
   if (m.status === "done" && m.winner_id) {
-    text = `${m.winner_id === pid ? "bat" : "battu par"} ${oppLabel}${m.score ? ` · ${m.score}` : ""}`
+    parts = [t(m.winner_id === pid ? "match.beat" : "match.beatenBy", { opp: oppLabel }), m.score]
   } else {
-    const when = formatMatchTime(m.scheduled_at)
-    text = `${m.status === "live" ? "En cours · " : ""}vs ${oppLabel}${when ? ` · ${when}` : ""}${m.status === "live" && m.score ? ` · ${m.score}` : ""}`
+    const live = m.status === "live"
+    parts = [live ? t("match.live") : null, t("match.vs", { opp: oppLabel }), formatMatchTime(m.scheduled_at), live ? m.score : null]
   }
+  const text = parts.filter(Boolean).join(" · ")
   return <span className={cn("block text-xs font-normal no-underline opacity-80", !wrap && "truncate", className)}>{text}</span>
 }

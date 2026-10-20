@@ -8,6 +8,21 @@
     <meta name="description" content="Un joueur par tour. Il perd, tu sors." />
     <title>Tiebreakers</title>
     <script>
+      // Language (src/lib/i18n.tsx): saved choice, else the first browser language we have, else English.
+      try {
+        var l = localStorage.getItem("tiebreakers-lang")
+        if (!/^(fr|en|es)$/.test(l || "")) {
+          l = "en"
+          var ps = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language]
+          for (var i = 0; i < ps.length; i++) {
+            var two = String(ps[i] || "").slice(0, 2).toLowerCase()
+            if (/^(fr|en|es)$/.test(two)) { l = two; break }
+          }
+        }
+        document.documentElement.lang = l
+      } catch (e) {}
+    </script>
+    <script>
       // Court surface (src/lib/theme.ts), applied before first paint.
       try {
         // Saved choice, else the last known live tournament's style (refreshed by loadLiveTheme).
