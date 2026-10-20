@@ -37,6 +37,8 @@ export type Tournament = {
   test?: boolean
   /** 250 / 500 / Masters 1000 / Grand Chelem: weighs its season points (lib/scoring.ts). Migration 0014. */
   category: Category
+  /** Host country, 3-letter code like players.country: the flag next to the name. Migration 0016. */
+  country?: string | null
 }
 
 /** Joining: during registration, or while live with late sign-ups on and a round still open. */
@@ -156,6 +158,8 @@ export type LastPick = {
   roundIdx: number
   roundName: string
   player: string
+  /** The player's 3-letter country code (his flag). */
+  country: string | null
   result: "won" | "lost" | null
   /** Every round with a pick, queued ones included. */
   picked: string[]
@@ -169,10 +173,10 @@ export type LastPick = {
 export async function fetchLastPicks(entries: EntryStatus[]): Promise<Record<string, LastPick>> {
   if (!entries.length) return {}
   const outAt = new Map(entries.map((e) => [e.entry_id, e.eliminated_round ?? Infinity]))
-  type Row = Pick & { players: { name: string } | null; rounds: { idx: number; name: string; locks_at: string } | null }
+  type Row = Pick & { players: { name: string; country: string | null } | null; rounds: { idx: number; name: string; locks_at: string } | null }
   const p = await supabase
     .from("picks")
-    .select("entry_id, round_id, player_id, players(name), rounds(idx, name, locks_at)")
+    .select("entry_id, round_id, player_id, players(name, country), rounds(idx, name, locks_at)")
     .in("entry_id", [...outAt.keys()])
   if (p.error) throw new Error(p.error.message)
   const now = Date.now()
@@ -204,6 +208,7 @@ export async function fetchLastPicks(entries: EntryStatus[]): Promise<Record<str
         roundIdx: x.rounds?.idx ?? 0,
         roundName: x.rounds?.name ?? "",
         player: x.players?.name ?? "?",
+        country: x.players?.country ?? null,
         result: result.get(`${x.player_id}:${x.round_id}`) ?? null,
         picked: picked[x.entry_id],
       },

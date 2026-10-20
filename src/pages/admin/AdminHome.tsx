@@ -4,6 +4,8 @@ import { ChevronRight } from "lucide-react"
 
 import { AppShell, Box, ChalkButton, ErrorBox, Field, Loading, PageTitle, Tag } from "@/components/court/AppShell"
 import { formatDate, groupTournaments, hasDraw, statusLabel, supabase, type WithDraw } from "@/lib/supabase"
+import { Flag } from "@/components/court/PlayerLabel"
+import { suggestCountry } from "@/lib/flags"
 import { CATEGORIES, suggestCategory, type Category } from "@/lib/scoring"
 import { suggestTheme, THEME_GROUPS, THEMES } from "@/lib/theme"
 
@@ -54,6 +56,28 @@ export function CategorySelect({ value, onChange, disabled, bare = false }: { va
   )
 }
 
+/** Host country: 3 letters like the players' (FRA, SUI…), the flag next to the tournament's name. */
+export function CountryField({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled?: boolean }) {
+  return (
+    <label className="block">
+      <span className="micro-label mb-2">Pays</span>
+      <span className="flex items-center gap-3">
+        <input
+          className="h-12 w-28 rounded-[2px] border-2 border-chalk/90 bg-brick/25 px-3 text-base text-chalk uppercase placeholder:text-chalk/50 focus:bg-brick/40 focus:outline-none"
+          value={value}
+          disabled={disabled}
+          maxLength={3}
+          pattern="[A-Za-z]{3}"
+          placeholder="FRA"
+          onChange={(e) => onChange(e.target.value.toUpperCase())}
+        />
+        <Flag code={value.length === 3 ? value : null} className="text-2xl" />
+      </span>
+      <span className="mt-1.5 block text-xs text-chalk/75">Code à 3 lettres (FRA, SUI, USA…) : le drapeau à côté du nom.</span>
+    </label>
+  )
+}
+
 /** Audit trail for direct table writes (the RPCs log themselves). */
 export async function logAdmin(action: string, payload: Record<string, unknown>) {
   const { data } = await supabase.auth.getSession()
@@ -77,6 +101,9 @@ export default function AdminHome() {
   // Category follows the style until the admin picks one.
   const [categoryChoice, setCategory] = useState<Category | null>(null)
   const category = categoryChoice ?? suggestCategory(style)
+  // Country (flag) follows the name until the admin types one.
+  const [countryChoice, setCountry] = useState<string | null>(null)
+  const country = countryChoice ?? suggestCountry(name) ?? ""
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [resetting, setResetting] = useState(false)
@@ -107,7 +134,7 @@ export default function AdminHome() {
     const start = new Date(startsAt)
     const { data: t, error } = await supabase
       .from("tournaments")
-      .insert({ name: name.trim(), tour, draw_size: drawSize, starts_at: start.toISOString(), external_id: externalId.trim() || null, theme: style || null, category })
+      .insert({ name: name.trim(), tour, draw_size: drawSize, starts_at: start.toISOString(), external_id: externalId.trim() || null, theme: style || null, category, country: country || null })
       .select("id")
       .single()
     if (error) {
@@ -163,7 +190,10 @@ export default function AdminHome() {
                       <div className="min-w-0 flex-1">
                         <Tag tone={t.status === "draft" ? "out" : "neutral"}>{statusLabel(t.status, hasDraw(t))}</Tag>
                         {t.test && <span className="ml-2"><Tag tone="alert">Test</Tag></span>}
-                        <h3 className="mt-2 font-display text-2xl leading-tight">{t.name}</h3>
+                        <h3 className="mt-2 font-display text-2xl leading-tight">
+                          <Flag code={t.country} className="mr-2" />
+                          {t.name}
+                        </h3>
                         <p className="mt-1 text-sm text-chalk/85">
                           {t.tour} · tableau {t.draw_size} · {formatDate(t.starts_at)}
                         </p>
@@ -232,6 +262,7 @@ export default function AdminHome() {
             />
             <ThemeSelect value={style} onChange={setThemeChoice} />
             <CategorySelect value={category} onChange={setCategory} />
+            <CountryField value={country} onChange={setCountry} />
             <Field label="ID Tennis API (ex. 21362 = Paris Masters)" value={externalId} onChange={(e) => setExternalId(e.target.value)} />
             {formError && <ErrorBox message={formError} />}
             <ChalkButton type="submit" disabled={saving} className="w-full">

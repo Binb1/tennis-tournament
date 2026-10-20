@@ -37,3 +37,40 @@ export function flagEmoji(code: string | null | undefined): string | null {
   if (!two) return null
   return String.fromCodePoint(...[...two].map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65))
 }
+
+/** Host country of a tournament from its name (admin forms; migration 0016 filled the existing ones). First match wins. */
+const HOSTS: [RegExp, string][] = [
+  [/roland|french open|paris|bercy|lyon|auvergne|marseille|montpellier|metz|moselle/i, "FRA"],
+  [/us open|cincinnati|indian wells|miami|washington|atlanta|winston|delray|dallas|houston|newport/i, "USA"],
+  [/shanghai|china|beijing|chengdu|hangzhou|zhuhai/i, "CHN"],
+  [/almaty|astana/i, "KAZ"],
+  [/halle|hamburg|munich|stuttgart/i, "GER"],
+  [/european open|antwerp/i, "BEL"], // after Hamburg ("Hamburg European Open")
+  [/erste|vienna|wien|kitzb/i, "AUT"],
+  [/basel|swiss|gstaad|geneva/i, "SUI"],
+  [/australi|adelaide|brisbane/i, "AUS"],
+  [/wimbledon|queen|eastbourne/i, "GBR"],
+  [/monte[\s-]?carlo|monaco/i, "MON"],
+  [/madrid|barcelona|mallorca/i, "ESP"],
+  [/\brome\b|\broma\b|internazionali|italian|turin|torino|atp finals/i, "ITA"],
+  [/canad|montr[eé]al|toronto|national bank/i, "CAN"],
+  [/rotterdam|hertogenbosch/i, "NED"],
+  [/doha|qatar/i, "QAT"],
+  [/dubai/i, "UAE"],
+  [/acapulco|mexic|los cabos/i, "MEX"],
+  [/\brio\b/i, "BRA"],
+  [/buenos aires|argentina/i, "ARG"],
+  [/santiago|chile/i, "CHI"],
+  [/tokyo|japan/i, "JPN"],
+  [/stockholm|b[aå]stad/i, "SWE"],
+  [/umag|croatia/i, "CRO"],
+  [/estoril/i, "POR"],
+  [/auckland/i, "NZL"],
+  [/hong kong/i, "HKG"],
+  [/marrakech/i, "MAR"],
+  [/jeddah|next gen/i, "KSA"],
+]
+
+export function suggestCountry(name: string): string | null {
+  return HOSTS.find(([re]) => re.test(name))?.[1] ?? null
+}

@@ -27,10 +27,19 @@ export default function Rules() {
             Tu peux préparer tous les tours à l'avance, et changer chaque choix jusqu'au verrouillage de son tour. Si un
             joueur prévu perd avant son tour, le site te prévient : change-le, sinon c'est une défaite.
           </li>
+          <li>Un joueur exempté (bye) ne peut pas être choisi pour le tour qu'il ne joue pas : il n'a pas de match à gagner.</li>
         </Rule>
 
         <Rule title="Verrouillage">
-          <li>Chaque tour se verrouille à une heure précise, affichée sur la page du tournoi.</li>
+          <li>
+            Un tour se verrouille dès que son premier match commence, pour tout le monde. Exemple : le 1er tour débute lundi
+            à 11 h, tous les choix du 1er tour sont figés lundi à 11 h, même pour un joueur qui ne joue que mardi.
+          </li>
+          <li>
+            Le 1er tour se verrouille donc au tout premier match du tournoi. À ce moment-là, le pronostic du vainqueur et
+            les inscriptions ferment aussi (sauf si l'admin ouvre les inscriptions en cours de tournoi).
+          </li>
+          <li>L'heure exacte de chaque verrouillage est affichée sur la page du tournoi, avec un compte à rebours.</li>
           <li>Après le verrouillage, les choix sont figés et ceux des autres deviennent visibles.</li>
         </Rule>
 
@@ -47,7 +56,7 @@ export default function Rules() {
         </Rule>
 
         <Rule title="Pronostic du vainqueur">
-          <li>Avant le verrouillage du 1er tour, devine qui remportera le titre.</li>
+          <li>Avant le tout premier match du tournoi, devine qui remportera le titre. Ensuite, c'est fermé.</li>
           <li>Il compte même si tu es éliminé du jeu entre-temps.</li>
         </Rule>
 

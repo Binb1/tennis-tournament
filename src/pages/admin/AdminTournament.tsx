@@ -7,7 +7,8 @@ import type { Category } from "@/lib/scoring"
 import { suggestTheme, themeLabel, useThemeOverride } from "@/lib/theme"
 import { formatTime, useNow } from "@/lib/time"
 import { cn } from "@/lib/utils"
-import { CategorySelect, logAdmin, selectClass, ThemeSelect } from "@/pages/admin/AdminHome"
+import { suggestCountry } from "@/lib/flags"
+import { CategorySelect, CountryField, logAdmin, selectClass, ThemeSelect } from "@/pages/admin/AdminHome"
 import {
   STATUS_LABEL,
   displayName,
@@ -109,6 +110,7 @@ function AdminTournamentView({ id }: { id: string }) {
             <StatusSection data={data} onChanged={reload} />
             <StyleSection data={data} onChanged={reload} />
             <CategorySection data={data} onChanged={reload} />
+            <CountrySection data={data} onChanged={reload} />
             <CurrentRoundSection data={data} />
             <RoundsSection data={data} onChanged={reload} />
             <DrawSection data={data} onChanged={reload} />
@@ -269,6 +271,59 @@ function CategorySection({ data, onChanged }: Props) {
     <Section title="Catégorie">
       <CategorySelect bare value={data.t.category} onChange={save} disabled={!!busy} />
       <p className="mt-2 text-sm text-chalk/85">Multiplie les points de saison de ce tournoi.</p>
+      {error && <div className="mt-3"><ErrorBox message={error} /></div>}
+    </Section>
+  )
+}
+
+/* 1d. Pays --------------------------------------------------------- */
+
+function CountrySection({ data, onChanged }: Props) {
+  const { busy, error, run } = useWrite(onChanged)
+  const current = data.t.country ?? ""
+  const [value, setValue] = useState(current)
+  const suggested = suggestCountry(data.t.name)
+
+  function save(country: string) {
+    return run("country", async () => {
+      const res = await supabase.from("tournaments").update({ country: country || null }).eq("id", data.t.id)
+      if (!res.error) await logAdmin("set_country", { tournament_id: data.t.id, from: data.t.country ?? null, to: country || null })
+      return res
+    })
+  }
+
+  return (
+    <Section title="Pays">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          save(value)
+        }}
+        className="flex flex-wrap items-end gap-3"
+      >
+        <CountryField value={value} onChange={setValue} disabled={!!busy} />
+        {value !== current && (
+          <ChalkButton type="submit" disabled={!!busy} className="mb-6">
+            Enregistrer
+          </ChalkButton>
+        )}
+      </form>
+      {suggested && suggested !== current && (
+        <p className="mt-2 text-sm text-chalk/85">
+          Suggéré d'après le nom : {suggested}.{" "}
+          <button
+            type="button"
+            className="font-bold underline underline-offset-4"
+            disabled={!!busy}
+            onClick={() => {
+              setValue(suggested)
+              save(suggested)
+            }}
+          >
+            Appliquer
+          </button>
+        </p>
+      )}
       {error && <div className="mt-3"><ErrorBox message={error} /></div>}
     </Section>
   )
