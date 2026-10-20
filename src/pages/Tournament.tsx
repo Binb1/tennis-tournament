@@ -183,7 +183,10 @@ function TournamentView({ id }: { id: string }) {
   return (
     <AppShell>
       <BackLink />
-      <PageTitle eyebrow={`${statusLabel(t.status, data.players.length > 0)} · ${t.tour}`}>{t.name}</PageTitle>
+      <PageTitle eyebrow={`${statusLabel(t.status, data.players.length > 0)} · ${t.tour}`}>
+        <Flag code={t.country} className="mr-3 align-[0.06em]" />
+        {t.name}
+      </PageTitle>
       <p className="-mt-2 mb-5 text-sm text-chalk/85">
         {formatDate(t.starts_at)} · {data.entries.length} {data.entries.length > 1 ? "inscrits" : "inscrit"}
       </p>
@@ -294,6 +297,21 @@ function derive(data: Data, uid: string | undefined, now: number) {
       if (pid && k < (slotOf.get(pid)?.k ?? Infinity)) slotOf.set(pid, { k, p: m.position })
     }
   }
+  // Byes: the draw lists them as a done match scored "bye", the other side empty. A player with a bye in a round, or
+  // whose first real match is in a later round, has nothing to win there (make_pick refuses him, migration 0016).
+  const byes = new Set<string>()
+  const firstMatch = new Map<string, number>()
+  for (const m of data.matches) {
+    const k = idxOf.get(m.round_id)
+    if (!k) continue
+    const bye = m.score?.toLowerCase() === "bye"
+    for (const pid of [m.player1_id, m.player2_id]) {
+      if (!pid) continue
+      if (bye) byes.add(`${m.round_id}:${pid}`)
+      else if (k < (firstMatch.get(pid) ?? Infinity)) firstMatch.set(pid, k)
+    }
+  }
+  const exempt = (pid: string, r: Round) => byes.has(`${r.id}:${pid}`) || (firstMatch.get(pid) ?? 0) > r.idx
   const lastIdx = Math.max(0, ...data.rounds.map((r) => r.idx))
   /** Season points for winning a round (lib/scoring.ts). */
   const pointsOf = (r: Round) => roundPoints(data.t.category, r.idx, lastIdx)
@@ -331,7 +349,7 @@ function derive(data: Data, uid: string | undefined, now: number) {
     }
   }
 
-  return { result, playerById, picksByEntry, livePicks, meetRound, myPath, roundByIdx, statusByEntry, lostRound, pickResult, currentRound, locked, noPick, trail, myEntry, myStatus, myPicks, matchOf, pointsOf, championOpen, championOf, championResult }
+  return { result, playerById, picksByEntry, livePicks, exempt, meetRound, myPath, roundByIdx, statusByEntry, lostRound, pickResult, currentRound, locked, noPick, trail, myEntry, myStatus, myPicks, matchOf, pointsOf, championOpen, championOf, championResult }
 }
 type Derived = ReturnType<typeof derive>
 
@@ -613,7 +631,7 @@ function ChampionCard({ data, d, onChanged }: { data: Data; d: Derived; onChange
         )}
         <p className="mt-1 text-sm text-chalk/85">
           {editable
-            ? "Modifiable jusqu'au verrouillage du 1er tour. Compte même si tu es éliminé."
+            ? "Modifiable jusqu'au premier match du tournoi. Compte même si tu es éliminé."
             : "Compte même si tu es éliminé."}
         </p>
         {editable && (
@@ -698,8 +716,9 @@ function RoundGrid({
             )}
           >
             <span className="block truncate text-[11px] font-bold tracking-[0.08em] uppercase [font-stretch:85%]">{r.name}</span>
-            <span className={cn("block truncate text-xs", !pid && "opacity-70", out && "line-through")}>
-              {pid ? shortName(d.playerById.get(pid)?.name ?? "") : "à choisir"}
+            <span className={cn("flex items-center gap-1 text-xs", !pid && "opacity-70", out && "line-through")}>
+              {pid && <Flag code={d.playerById.get(pid)?.country} />}
+              <span className="min-w-0 truncate">{pid ? shortName(d.playerById.get(pid)?.name ?? "") : "à choisir"}</span>
             </span>
           </button>
         )
@@ -738,6 +757,7 @@ function PlayerPicker({
   const reason = (p: Player) => {
     const lost = d.lostRound.get(p.id)
     if (lost) return `Éliminé · ${roundName(lost)}`
+    if (d.exempt(p.id, round)) return `Exempté (bye) · ${round.name}`
     const used = others.find((o) => o.pid === p.id)
     if (used) return `${d.locked(used.r) ? "Déjà choisi" : "Prévu"} · ${used.r.name}`
     // Both must win up to the round they meet in: one of the two picks is a sure loss.
@@ -850,7 +870,10 @@ function Planner({ data, d, onChanged, onClose }: { data: Data; d: Derived; onCh
       <div className="space-y-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <span className="micro-label">{data.t.name}</span>
+            <span className="micro-label">
+              <Flag code={data.t.country} className="mr-1.5" />
+              {data.t.name}
+            </span>
             <h1 className="font-display text-3xl leading-tight">Remplir mes tours</h1>
           </div>
           <LineButton onClick={onClose} className="shrink-0">
@@ -1008,6 +1031,11 @@ function LockBlock({ round, planned = false, points }: { round: Round; planned?:
         Heure locale : {formatDate(round.locks_at, true)}
         {planned && " · suit le programme, peut avancer"}
         {points != null && ` · tour gagné : +${points} pts`}
+      </p>
+      <p className="mt-1 text-xs text-chalk/80">
+        {round.idx === 1
+          ? "Se verrouille au premier match du tournoi, même si ton joueur joue plus tard. Le pronostic du vainqueur aussi."
+          : "Se verrouille au premier match de ce tour, même si ton joueur joue plus tard."}
       </p>
       {hurry && <BallBoyRun className="mt-1" />}
     </Box>

@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom"
 import { ChevronRight } from "lucide-react"
 
 import { AppShell, Box, ChalkButton, ErrorBox, LineButton, Loading, PageTitle, ResultTag, Tag } from "@/components/court/AppShell"
+import { Flag } from "@/components/court/PlayerLabel"
 import { useAuth } from "@/lib/auth"
 import {
   displayName,
@@ -190,7 +191,10 @@ export default function Profile() {
                 <li key={r.id} className="border-t-2 border-chalk/50 first:border-t-0">
                   <Link to={`/tournois/${t.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-chalk/10">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">{t.name}</p>
+                      <p className="truncate font-medium">
+                        <Flag code={t.country} className="mr-1.5" />
+                        {t.name}
+                      </p>
                       <p className="text-xs text-chalk/80">
                         {formatDate(t.starts_at)}
                         {s && s.rounds_survived > 0 && ` · ${s.rounds_survived} ${s.rounds_survived > 1 ? "tours passés" : "tour passé"}`}
@@ -201,7 +205,10 @@ export default function Profile() {
                       {last && (
                         <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs">
                           <span className="text-chalk/85">Ton choix · {last.roundName} :</span>
-                          <span className="font-bold">{last.player}</span>
+                          <span className="inline-flex items-center gap-1 font-bold">
+                            <Flag code={last.country} />
+                            {last.player}
+                          </span>
                           <ResultTag result={last.result} />
                         </p>
                       )}
