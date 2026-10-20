@@ -1,3 +1,137 @@
 import { ns } from "@/locales/ns"
 
-export default ns({}, {}, {})
+/** Game rules (pages/Rules): the reference text. */
+export default ns(
+  {
+    eyebrow: "Comment ça marche",
+    title: "Règles du jeu",
+    tagline: "Un joueur par tour. Il perd, tu sors.",
+    intro:
+      "À chaque tour d'un tournoi, choisis un joueur qui doit gagner son match. Tant que tes choix gagnent, tu restes en vie. Les derniers debout remportent le tournoi.",
+    pickTitle: "Choisir",
+    pick1: "Un joueur par tour, encore dans le tableau.",
+    pick2: "Jamais deux fois le même joueur dans un tournoi.",
+    pick3:
+      "Tu peux préparer tous les tours à l'avance, et changer chaque choix jusqu'au verrouillage de son tour. Si un joueur prévu perd avant son tour, le site te prévient : change-le, sinon c'est une défaite.",
+    pick4: "Un joueur exempté (bye) ne peut pas être choisi pour le tour qu'il ne joue pas : il n'a pas de match à gagner.",
+    lockTitle: "Verrouillage",
+    lock1:
+      "Un tour se verrouille dès que son premier match commence, pour tout le monde. Exemple : le 1er tour débute lundi à 11 h, tous les choix du 1er tour sont figés lundi à 11 h, même pour un joueur qui ne joue que mardi.",
+    lock2:
+      "Le 1er tour se verrouille donc au tout premier match du tournoi. À ce moment-là, le pronostic du vainqueur et les inscriptions ferment aussi (sauf si l'admin ouvre les inscriptions en cours de tournoi).",
+    lock3: "L'heure exacte de chaque verrouillage est affichée sur la page du tournoi, avec un compte à rebours.",
+    lock4: "Après le verrouillage, les choix sont figés et ceux des autres deviennent visibles.",
+    outTitle: "Élimination",
+    out1: "Ton joueur perd son match : tu es éliminé.",
+    out2: "Aucun choix au verrouillage : tu es éliminé aussi.",
+    out3: "Abandon en cours de match ou forfait avant de jouer : défaite. Ton joueur passe sur abandon ou forfait de son adversaire : victoire.",
+    out4: "Tu restes dans le classement avec tout ton parcours.",
+    winTitle: "Gagner un tournoi",
+    win1: "Tous ceux encore en vie après la finale gagnent.",
+    win2: "Si tous les derniers survivants tombent au même tour, ils sont co-vainqueurs.",
+    championTitle: "Pronostic du vainqueur",
+    champion1: "Avant le tout premier match du tournoi, devine qui remportera le titre. Ensuite, c'est fermé.",
+    champion2: "Il compte même si tu es éliminé du jeu entre-temps.",
+    reprieveTitle: "Repêchage",
+    reprieve1:
+      "Un tour « repêché » est un tour passé sans choix qui ne t'élimine pas : tu as rejoint le tournoi en cours, ou l'admin a annulé ton absence de choix.",
+    reprieve2: "Il ne rapporte aucun point au classement de la saison.",
+    seasonTitle: "Classement de la saison",
+    season1:
+      "Chaque tour gagné rapporte des points, de plus en plus jusqu'à la finale, multipliés selon le tournoi (250, 500, Masters 1000, Grand Chelem). Bonus pour le dernier debout et pour le bon pronostic du vainqueur. {link}",
+    season1Link: "Le barème en images",
+    season2: "Tous les tournois comptent, même ceux qui se jouent la même semaine.",
+    season3: "À égalité de points : le plus de tournois joués, puis gagnés, puis le plus de tours gagnés.",
+    season4: "Une saison = les tournois qui commencent dans l'année.",
+    seeTournaments: "Voir les tournois",
+    loginToPlay: "Se connecter pour jouer",
+  },
+  {
+    eyebrow: "How it works",
+    title: "Game rules",
+    tagline: "One player per round. He loses, you're out.",
+    intro:
+      "In every round of a tournament, pick one player who has to win his match. As long as your picks keep winning, you're still alive. The last ones standing win the tournament.",
+    pickTitle: "Picking",
+    pick1: "One player per round, still in the draw.",
+    pick2: "Never the same player twice in a tournament.",
+    pick3:
+      "You can plan every round in advance and change each pick until its round locks. If a planned player loses before his round, the site warns you: swap him out, or it counts as a loss.",
+    pick4: "A player with a bye can't be picked for the round he skips: he has no match to win.",
+    lockTitle: "Lock",
+    lock1:
+      "A round locks as soon as its first match starts, for everyone. Example: round 1 starts Monday at 11:00, so every round 1 pick is frozen Monday at 11:00, even for a player who only plays on Tuesday.",
+    lock2:
+      "So round 1 locks at the very first match of the tournament. At that moment, champion predictions and sign-ups close too (unless the admin opens sign-ups mid-tournament).",
+    lock3: "The exact time of each lock is shown on the tournament page, with a countdown.",
+    lock4: "Once a round locks, picks are frozen and everyone else's become visible.",
+    outTitle: "Elimination",
+    out1: "Your player loses his match: you're out.",
+    out2: "No pick when the round locks: you're out too.",
+    out3: "Retirement mid-match or walkover before playing: loss. Your player goes through on his opponent's retirement or walkover: win.",
+    out4: "You stay in the ranking with your whole run.",
+    winTitle: "Winning a tournament",
+    win1: "Everyone still alive after the final wins.",
+    win2: "If all the last survivors go out in the same round, they're joint winners.",
+    championTitle: "Champion prediction",
+    champion1: "Before the very first match of the tournament, guess who'll lift the trophy. After that, it's closed.",
+    champion2: "It counts even if you've been knocked out of the game in the meantime.",
+    reprieveTitle: "Reprieve",
+    reprieve1:
+      "A “reprieved” round is a round you passed without a pick that doesn't knock you out: you joined the tournament after it started, or the admin cancelled your missing pick.",
+    reprieve2: "It earns no points in the season ranking.",
+    seasonTitle: "Season ranking",
+    season1:
+      "Every round won earns points, more and more up to the final, multiplied by the tournament (250, 500, Masters 1000, Grand Slam). Bonuses for the last one standing and for the right champion prediction. {link}",
+    season1Link: "Scoring in pictures",
+    season2: "Every tournament counts, even ones played the same week.",
+    season3: "Tied on points: most tournaments played, then won, then most rounds won.",
+    season4: "A season = the tournaments that start in the calendar year.",
+    seeTournaments: "See the tournaments",
+    loginToPlay: "Log in to play",
+  },
+  {
+    eyebrow: "Cómo funciona",
+    title: "Reglas del juego",
+    tagline: "Un jugador por ronda. Si pierde, quedas fuera.",
+    intro:
+      "En cada ronda de un torneo, elige un jugador que tenga que ganar su partido. Mientras tus elecciones ganen, sigues vivo. Los últimos en pie ganan el torneo.",
+    pickTitle: "Elegir",
+    pick1: "Un jugador por ronda, que siga en el cuadro.",
+    pick2: "Nunca el mismo jugador dos veces en un torneo.",
+    pick3:
+      "Puedes preparar todas las rondas por adelantado y cambiar cada elección hasta el cierre de su ronda. Si un jugador previsto pierde antes de su ronda, la web te avisa: cámbialo, si no, cuenta como derrota.",
+    pick4: "Un jugador exento (bye) no se puede elegir para la ronda que no juega: no tiene ningún partido que ganar.",
+    lockTitle: "Cierre",
+    lock1:
+      "Una ronda se cierra en cuanto empieza su primer partido, para todos. Ejemplo: la 1.ª ronda empieza el lunes a las 11:00, así que todas las elecciones de la 1.ª ronda quedan fijadas el lunes a las 11:00, aunque el jugador no juegue hasta el martes.",
+    lock2:
+      "Por tanto, la 1.ª ronda se cierra con el primerísimo partido del torneo. En ese momento también se cierran el pronóstico del campeón y las inscripciones (salvo que el admin abra las inscripciones con el torneo en marcha).",
+    lock3: "La hora exacta de cada cierre aparece en la página del torneo, con una cuenta atrás.",
+    lock4: "Tras el cierre, las elecciones quedan fijadas y las de los demás se hacen visibles.",
+    outTitle: "Eliminación",
+    out1: "Tu jugador pierde su partido: quedas eliminado.",
+    out2: "Sin elección al cierre: también quedas eliminado.",
+    out3: "Retirada durante el partido o abandono (walkover) antes de jugar: derrota. Tu jugador pasa por retirada o abandono de su rival: victoria.",
+    out4: "Sigues en la clasificación con todo tu recorrido.",
+    winTitle: "Ganar un torneo",
+    win1: "Todos los que sigan vivos tras la final ganan.",
+    win2: "Si todos los últimos supervivientes caen en la misma ronda, son coganadores.",
+    championTitle: "Pronóstico del campeón",
+    champion1: "Antes del primerísimo partido del torneo, adivina quién se llevará el título. Después, se cierra.",
+    champion2: "Cuenta aunque te hayan eliminado del juego mientras tanto.",
+    reprieveTitle: "Repesca",
+    reprieve1:
+      "Una ronda «repescada» es una ronda pasada sin elección que no te elimina: te uniste al torneo ya empezado, o el admin anuló tu falta de elección.",
+    reprieve2: "No suma ningún punto en la clasificación de la temporada.",
+    seasonTitle: "Clasificación de la temporada",
+    season1:
+      "Cada ronda ganada suma puntos, cada vez más hasta la final, multiplicados según el torneo (250, 500, Masters 1000, Grand Slam). Bonus para el último en pie y por acertar el pronóstico del campeón. {link}",
+    season1Link: "La puntuación en imágenes",
+    season2: "Todos los torneos cuentan, incluso los que se juegan la misma semana.",
+    season3: "En caso de empate a puntos: más torneos jugados, luego ganados, luego más rondas ganadas.",
+    season4: "Una temporada = los torneos que empiezan en el año.",
+    seeTournaments: "Ver los torneos",
+    loginToPlay: "Inicia sesión para jugar",
+  },
+)

@@ -1,5 +1,6 @@
 import { useEffect, useSyncExternalStore } from "react"
 
+import { t } from "@/lib/i18n"
 import { supabase } from "@/lib/supabase"
 
 /**
@@ -26,18 +27,30 @@ export type ThemeId =
 
 export type ThemeGroup = "slam" | "masters"
 
-export const THEME_GROUPS: { id: ThemeGroup; label: string }[] = [
-  { id: "slam", label: "Grand Chelem" },
-  { id: "masters", label: "Masters 1000" },
+/** `label`: getters, read in the current language. */
+export const THEME_GROUPS: { id: ThemeGroup; readonly label: string }[] = [
+  {
+    id: "slam",
+    get label() {
+      return t("theme.groupSlam")
+    },
+  },
+  {
+    id: "masters",
+    get label() {
+      return t("theme.groupMasters")
+    },
+  },
 ]
 
 /**
  * `court`/`outer`/`line` draw the picker swatches; `color` is the header wall (browser theme-color).
  * `stripe`: optional second grass tone (mown stripes) on the swatch.
+ * `label`: tournament names, the ones with a local name (Australian Open, Roma) are getters in the current language.
  */
 export const THEMES: {
   id: ThemeId
-  label: string
+  readonly label: string
   group: ThemeGroup
   court: string
   outer: string
@@ -47,13 +60,13 @@ export const THEMES: {
 }[] = [
   { id: "clay", label: "Roland-Garros", group: "slam", court: "#bc5128", outer: "#bc5128", line: "#f7f2e8", color: "#00503c" },
   { id: "usopen", label: "US Open", group: "slam", court: "#3c638e", outer: "#557f49", line: "#ffffff", color: "#0b1f3a" },
-  { id: "ao", label: "Open d'Australie", group: "slam", court: "#1b74b3", outer: "#0f4f86", line: "#ffffff", color: "#062a4d" },
+  { id: "ao", get label() { return t("theme.ao") }, group: "slam", court: "#1b74b3", outer: "#0f4f86", line: "#ffffff", color: "#062a4d" },
   { id: "wimbledon", label: "Wimbledon", group: "slam", court: "#477833", outer: "#3e6b2a", line: "#f5efdc", color: "#0c3b1f", stripe: "#3e6b2a" },
   { id: "indianwells", label: "Indian Wells", group: "masters", court: "#3d64a3", outer: "#5b4d8a", line: "#ffffff", color: "#1b3a2b" },
   { id: "miami", label: "Miami", group: "masters", court: "#2b6ca6", outer: "#12707a", line: "#ffffff", color: "#0a3140" },
   { id: "montecarlo", label: "Monte-Carlo", group: "masters", court: "#ad5028", outer: "#ad5028", line: "#f7f2e8", color: "#0a2d5c" },
   { id: "madrid", label: "Madrid", group: "masters", court: "#b24a27", outer: "#b24a27", line: "#f7f2e8", color: "#2a0a1f" },
-  { id: "rome", label: "Rome", group: "masters", court: "#a8552e", outer: "#a8552e", line: "#f7f2e8", color: "#1a3a2a" },
+  { id: "rome", get label() { return t("theme.rome") }, group: "masters", court: "#a8552e", outer: "#a8552e", line: "#f7f2e8", color: "#1a3a2a" },
   { id: "canada", label: "Canada", group: "masters", court: "#2f5e9c", outer: "#1d3a68", line: "#ffffff", color: "#b0162f" },
   { id: "cincinnati", label: "Cincinnati", group: "masters", court: "#2e5a92", outer: "#3d7644", line: "#ffffff", color: "#13301f" },
   { id: "shanghai", label: "Shanghai", group: "masters", court: "#5d4192", outer: "#422c70", line: "#ffffff", color: "#7a1016" },

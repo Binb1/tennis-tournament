@@ -5,11 +5,12 @@ import { AppShell, Box, PageTitle } from "@/components/court/AppShell"
 import { PixelSvg, Sprite } from "@/components/pixel/Sprite"
 import { BALL, PLAYER_CHEER, QUESTION_BALL, TROPHY } from "@/components/pixel/sprites"
 import { useAuth } from "@/lib/auth"
+import { t, type MsgKey } from "@/lib/i18n"
 import { CATEGORIES, bonusPoints, roundWeight, type Category } from "@/lib/scoring"
 import { cn } from "@/lib/utils"
 
-/** Round names counted back from the final (index = rounds left after it). */
-const FROM_END = ["Finale", "Demies", "Quarts", "8es", "16es", "32es", "64es"]
+/** Round names counted back from the final (index = rounds left after it). Keys only: t() runs at render. */
+const FROM_END: MsgKey[] = ["points.end0", "points.end1", "points.end2", "points.end3", "points.end4", "points.end5", "points.end6"]
 /** Typical draw per category: 28/32 for 250 and 500, 96/128 for Masters and Slams. */
 const ROUNDS: Record<Category, number> = { atp250: 5, atp500: 5, masters1000: 7, grand_slam: 7 }
 const TOP = roundWeight(0) * CATEGORIES[CATEGORIES.length - 1].mult
@@ -28,16 +29,16 @@ export default function Points() {
 
   return (
     <AppShell bare={!session}>
-      <PageTitle eyebrow="Classement de la saison">Les points</PageTitle>
+      <PageTitle eyebrow={t("points.eyebrow")}>{t("points.title")}</PageTitle>
 
       <Box className="mb-10 px-4 py-4">
-        <p className="font-display text-2xl leading-tight">Plus tu vas loin, plus ça rapporte.</p>
-        <p className="mt-2 text-sm text-chalk/90">Et plus le tournoi est grand, plus chaque tour pèse.</p>
+        <p className="font-display text-2xl leading-tight">{t("points.lead")}</p>
+        <p className="mt-2 text-sm text-chalk/90">{t("points.leadSub")}</p>
       </Box>
 
       <div className="space-y-12">
-        <Step n={1} title="Chaque tour gagné">
-          <div role="radiogroup" aria-label="Catégorie de tournoi" className="mb-4 grid grid-cols-4 gap-1.5">
+        <Step n={1} title={t("points.step1")}>
+          <div role="radiogroup" aria-label={t("points.categoryLabel")} className="mb-4 grid grid-cols-4 gap-1.5">
             {CATEGORIES.map((x) => (
               <button
                 key={x.id}
@@ -54,7 +55,7 @@ export default function Points() {
             ))}
           </div>
           <Box className="px-3 pt-4 pb-3">
-            <div className="flex h-44 items-end gap-1.5" aria-label={`Points par tour, ${c.label}`}>
+            <div className="flex h-44 items-end gap-1.5" aria-label={t("points.chartLabel", { category: c.label })}>
               {rounds.map((left) => {
                 const pts = roundWeight(left) * c.mult
                 return (
@@ -76,15 +77,15 @@ export default function Points() {
             <div className="mt-1.5 flex gap-1.5">
               {rounds.map((left) => (
                 <span key={left} className="min-w-0 flex-1 truncate text-center text-[10px] font-bold tracking-[0.04em] uppercase [font-stretch:85%]">
-                  {FROM_END[left]}
+                  {t(FROM_END[left])}
                 </span>
               ))}
             </div>
           </Box>
-          <p className="mt-3 text-sm text-chalk/90">Chaque tour vaut plus que le précédent. La finale vaut le plus.</p>
+          <p className="mt-3 text-sm text-chalk/90">{t("points.step1Note")}</p>
         </Step>
 
-        <Step n={2} title="Le tournoi multiplie">
+        <Step n={2} title={t("points.step2")}>
           <div className="grid grid-cols-4 items-end gap-2">
             {CATEGORIES.map((x, i) => (
               <div key={x.id} className="flex flex-col items-center text-center">
@@ -96,10 +97,10 @@ export default function Points() {
               </div>
             ))}
           </div>
-          <p className="mt-4 text-sm text-chalk/90">Un Grand Chelem vaut 4 fois un ATP 250.</p>
+          <p className="mt-4 text-sm text-chalk/90">{t("points.step2Note")}</p>
         </Step>
 
-        <Step n={3} title="Deux bonus">
+        <Step n={3} title={t("points.step3")}>
           <div className="grid grid-cols-2 gap-3">
             <Bonus
               art={
@@ -107,8 +108,8 @@ export default function Points() {
                   <Sprite rows={PLAYER_CHEER} className="px-hop" />
                 </PixelSvg>
               }
-              title="Dernier debout"
-              text="Tu gagnes le tournoi."
+              title={t("points.lastStandingTitle")}
+              text={t("points.lastStandingText")}
             />
             <Bonus
               art={
@@ -116,34 +117,32 @@ export default function Points() {
                   <Sprite rows={QUESTION_BALL} className="px-hop" style={{ "--delay": "0.4s" } as CSSProperties} />
                 </PixelSvg>
               }
-              title="Bon pronostic"
-              text="Tu as deviné le vainqueur avant le 1er tour."
+              title={t("points.championTitle")}
+              text={t("points.championText")}
             />
           </div>
           <p className="mt-3 text-sm text-chalk/90">
-            +{bonusPoints("atp250")} chacun en 250, jusqu'à +{bonusPoints("grand_slam")} en Grand Chelem. Le pronostic
-            compte même si tu es éliminé.
+            {t("points.bonusNote", { small: bonusPoints("atp250"), big: bonusPoints("grand_slam") })}
           </p>
         </Step>
 
-        <Step n={4} title="Tout compte">
+        <Step n={4} title={t("points.step4")}>
           <Box className="space-y-4 px-4 py-4">
-            <Compare label={`10 × 1er tour d'un 250`} pts={10 * r1of250} balls={10} />
-            <Compare label="1 demie de Grand Chelem" pts={slamSemi} balls={1} big />
+            <Compare label={t("points.compareMany", { count: 10 })} pts={10 * r1of250} balls={10} />
+            <Compare label={t("points.compareOne")} pts={slamSemi} balls={1} big />
           </Box>
           <p className="mt-3 text-sm text-chalk/90">
-            Chaque tournoi joué ajoute des points, même trois la même semaine. Mais viser juste rapporte plus que jouer
-            beaucoup : tu peux rater des tournois et finir n°1.
+            {t("points.step4Note")}
           </p>
         </Step>
       </div>
 
       <p className="mt-12 flex flex-wrap gap-x-6 text-sm">
         <Link to="/regles" className="inline-flex min-h-11 items-center underline underline-offset-4">
-          Règles du jeu
+          {t("points.rules")}
         </Link>
         <Link to={session ? "/saison" : "/connexion"} className="inline-flex min-h-11 items-center underline underline-offset-4">
-          {session ? "Classement de la saison" : "Se connecter pour jouer"}
+          {session ? t("points.seasonRanking") : t("points.loginToPlay")}
         </Link>
       </p>
     </AppShell>
@@ -188,7 +187,7 @@ function Compare({ label, pts, balls, big = false }: { label: string; pts: numbe
       </div>
       <span className={cn("shrink-0 font-num tabular-nums", big ? "text-4xl" : "text-2xl")}>
         {pts}
-        <span className="ml-1 font-sans text-xs">pts</span>
+        <span className="ml-1 font-sans text-xs">{t("points.pts")}</span>
       </span>
     </div>
   )

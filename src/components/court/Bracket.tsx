@@ -1,6 +1,7 @@
 import { Check, ChevronRight } from "lucide-react"
 
 import { Flag } from "@/components/court/PlayerLabel"
+import { roundName, t } from "@/lib/i18n"
 import type { Match, Player, Round } from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 
@@ -80,7 +81,7 @@ export function Bracket({
       <div className="flex w-max py-3">
         {cols.map(({ r }, k) => (
           <div key={r.id} className="w-[212px] shrink-0">
-            <h3 className="mb-2 px-4 text-center text-[11px] font-bold tracking-[0.12em] uppercase [font-stretch:85%]">{r.name}</h3>
+            <h3 className="mb-2 px-4 text-center text-[11px] font-bold tracking-[0.12em] uppercase [font-stretch:85%]">{roundName(r.name)}</h3>
             <ol className="flex flex-col" style={{ height: first * SLOT_H }}>
               {slotsByCol[k].map((s, i) => (
                 <li key={i} data-slot={`${r.id}:${i + 1}`} className="relative flex flex-1 items-center px-4">
@@ -143,11 +144,11 @@ function MatchBox({ s, playerById, pick }: { s: Slot; playerById: Map<string, Pl
             <Flag code={p.country} />
             {p.seed && <span className="shrink-0 text-[10px] tabular-nums opacity-75">[{p.seed}]</span>}
             <span className="min-w-0 flex-1 truncate">{p.name}</span>
-            {won && <Check aria-label="gagné" className="size-3.5 shrink-0" />}
-            {goesOn && <ChevronRight aria-label="passe (prévu)" className="size-3.5 shrink-0 text-ball" />}
+            {won && <Check aria-label={t("bracket.won")} className="size-3.5 shrink-0" />}
+            {goesOn && <ChevronRight aria-label={t("bracket.throughPlanned")} className="size-3.5 shrink-0 text-ball" />}
           </>
         ) : (
-          <span className="text-chalk/50">{m ? "à déterminer" : "–"}</span>
+          <span className="text-chalk/50">{m ? t("bracket.tbd") : "–"}</span>
         )}
       </div>
     )
@@ -158,7 +159,7 @@ function MatchBox({ s, playerById, pick }: { s: Slot; playerById: Map<string, Pl
       <div className="border-t border-chalk/30">{row(s.p2)}</div>
       {m?.score && (
         <div className="truncate border-t border-chalk/30 px-1.5 text-[10px] leading-4 text-chalk/80 tabular-nums">
-          {m.status === "live" ? "En cours · " : ""}
+          {m.status === "live" ? `${t("bracket.live")} · ` : ""}
           {m.score}
         </div>
       )}

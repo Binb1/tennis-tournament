@@ -3,6 +3,7 @@ import { Link } from "react-router-dom"
 import { ChevronDown } from "lucide-react"
 
 import { Box } from "@/components/court/AppShell"
+import { roundName, t } from "@/lib/i18n"
 import { bonusPoints, categoryOf, maxPoints, roundPoints, type Category } from "@/lib/scoring"
 import type { Round } from "@/lib/supabase"
 import { cn } from "@/lib/utils"
@@ -29,7 +30,7 @@ export function StakeTag({ category, rounds }: { category: Category; rounds: num
   const max = maxPoints(category, rounds)
   return (
     <span
-      title={`${c.label} : points ×${c.mult}. Jusqu'à ${max} pts avec un parcours parfait, la victoire et le bon pronostic.`}
+      title={t("stake.tagTitle", { label: c.label, mult: c.mult, max })}
       className="inline-flex items-center gap-1.5"
     >
       <CategoryBadge category={category} />
@@ -46,9 +47,9 @@ export function StakeCard({ category, rounds }: { category: Category; rounds: Ro
   const bonus = bonusPoints(category)
   const max = maxPoints(category, rounds.length)
   const lines = [
-    ...rounds.map((r) => ({ label: `${r.name} gagné`, pts: roundPoints(category, r.idx, lastIdx) })),
-    { label: "Dernier debout", pts: bonus },
-    { label: "Bon pronostic du vainqueur", pts: bonus },
+    ...rounds.map((r) => ({ label: t("stake.roundWon", { round: roundName(r.name) }), pts: roundPoints(category, r.idx, lastIdx) })),
+    { label: t("stake.lastStanding"), pts: bonus },
+    { label: t("stake.goodChampion"), pts: bonus },
   ]
 
   return (
@@ -61,12 +62,12 @@ export function StakeCard({ category, rounds }: { category: Category; rounds: Ro
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-2">
             <CategoryBadge category={category} />
-            <span className="micro-label">En jeu · points ×{c.mult}</span>
+            <span className="micro-label">{t("stake.atStake", { mult: c.mult })}</span>
           </span>
-          <span className="mt-1 block font-display text-2xl leading-tight">Jusqu'à {max} pts</span>
+          <span className="mt-1 block font-display text-2xl leading-tight">{t("stake.upTo", { max })}</span>
         </span>
         <span className="flex shrink-0 items-center gap-1 text-xs font-medium">
-          {open ? "Masquer" : "Détail"}
+          {open ? t("stake.hide") : t("stake.details")}
           <ChevronDown className={cn("size-4 transition-transform", open && "rotate-180")} />
         </span>
       </button>
@@ -81,9 +82,9 @@ export function StakeCard({ category, rounds }: { category: Category; rounds: Ro
             ))}
           </ul>
           <p className="mt-3 text-xs text-chalk/85">
-            Chaque tour vaut plus que le précédent, et un tournoi plus prestigieux multiplie tout.{" "}
+            {t("stake.explain")}{" "}
             <Link to="/points" className="underline underline-offset-4">
-              Le barème en images
+              {t("stake.scaleLink")}
             </Link>
           </p>
         </div>

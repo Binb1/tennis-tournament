@@ -8,6 +8,7 @@ import { PixelRally } from "@/components/pixel/Animations"
 import { UmpireChair } from "@/components/court/UmpireChair"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth"
+import { t } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 /**
@@ -60,7 +61,7 @@ function Header() {
         to={href}
         className="inline-flex min-h-11 items-center font-sans text-sm font-medium underline decoration-chalk/40 underline-offset-[6px] transition-colors hover:decoration-chalk"
       >
-        Se connecter
+        {t("landing.login")}
       </Link>
     </SiteHeader>
   )
@@ -153,7 +154,7 @@ function Court() {
           className="animate-rise font-sans text-[clamp(1rem,4.4cqw,1.5rem)] leading-snug font-medium text-balance"
           style={{ animationDelay: "400ms" }}
         >
-          Un joueur par tour. Il perd, tu sors.
+          {t("landing.tagline")}
         </p>
       </Zone>
 
@@ -164,23 +165,23 @@ function Court() {
           style={{ animationDelay: "500ms" }}
         >
           <Link to={href}>
-            Rejoindre le tournoi
+            {t("landing.join")}
             <ArrowRight className="size-5 transition-transform group-hover/button:translate-x-1" />
           </Link>
         </Button>
       </Zone>
 
       {/* ---- bottom half ---- */}
-      <h2 className="sr-only">Comment ça marche</h2>
+      <h2 className="sr-only">{t("landing.howItWorks")}</h2>
       <div role="list">
         <Zone role="listitem" top={50} height={box} width={50}>
-          <Step n="1" title="Choisis" text="Avant chaque tour" />
+          <Step n="1" title={t("landing.step1Title")} text={t("landing.step1Text")} />
         </Zone>
         <Zone role="listitem" top={50} height={box} left={50} width={50}>
-          <Step n="2" title="Survis" text="Jamais deux fois le même" />
+          <Step n="2" title={t("landing.step2Title")} text={t("landing.step2Text")} />
         </Zone>
         <Zone role="listitem" top={serviceBottom} height={BACK}>
-          <Step n="3" title="Gagne" text="Reste le dernier debout" />
+          <Step n="3" title={t("landing.step3Title")} text={t("landing.step3Text")} />
         </Zone>
       </div>
     </div>

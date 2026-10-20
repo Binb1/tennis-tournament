@@ -12,6 +12,8 @@ import {
   PLAYER_SWING,
   RACKET,
 } from "@/components/pixel/sprites"
+import { t } from "@/lib/i18n"
+import { formatLeft } from "@/lib/time"
 import { cn } from "@/lib/utils"
 import "@/components/pixel/pixel.css"
 
@@ -138,7 +140,7 @@ export function PixelNetFault({ className }: { className?: string }) {
 /* 6 ------------------------------------------------------------------ */
 
 /** Loading: a ball bouncing on the line, its shadow shrinking as it rises. */
-export function PixelLoader({ label = "Chargement…", className }: { label?: string; className?: string }) {
+export function PixelLoader({ label = t("shell.loading"), className }: { label?: string; className?: string }) {
   return (
     <div role="status" className={cn("flex flex-col items-center gap-3 py-10", className)}>
       <PixelSvg w={12} h={16} className="w-9">
@@ -184,7 +186,7 @@ export function ShotClock({ ms, className }: { ms: number; className?: string })
   return (
     <span
       role="timer"
-      aria-label={`${Math.floor(s / 60)} min ${s % 60} s`}
+      aria-label={formatLeft(ms)}
       className={cn("inline-block bg-ink px-2 py-1.5", urgent && "px-blink", className)}
     >
       <PixelSvg w={x - 1} h={7} className="h-7 w-auto">

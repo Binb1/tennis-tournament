@@ -4,7 +4,8 @@ import { ArrowRight } from "lucide-react"
 
 import { AppShell, Box, ChalkButton, ErrorBox, Field, PageTitle, PasswordField } from "@/components/court/AppShell"
 import { useAuth } from "@/lib/auth"
-import { authErrorFr } from "@/lib/authErrors"
+import { authError } from "@/lib/authErrors"
+import { t } from "@/lib/i18n"
 import { supabase } from "@/lib/supabase"
 
 type Mode = "signin" | "signup"
@@ -26,7 +27,7 @@ export default function Login() {
     e.preventDefault()
     setError(null)
     if (mode === "signup" && password.length < 8) {
-      setError("Mot de passe trop court (8 caractères minimum)")
+      setError(t("login.passwordTooShort"))
       return
     }
     setBusy(true)
@@ -34,7 +35,7 @@ export default function Login() {
     if (mode === "signin") {
       const { error } = await supabase.auth.signInWithPassword(creds)
       setBusy(false)
-      if (error) return setError(authErrorFr(error))
+      if (error) return setError(authError(error))
       navigate("/tournois", { replace: true })
     } else {
       const { data, error } = await supabase.auth.signUp({
@@ -42,9 +43,9 @@ export default function Login() {
         options: { emailRedirectTo: window.location.origin + "/tournois" },
       })
       setBusy(false)
-      if (error) return setError(authErrorFr(error))
+      if (error) return setError(authError(error))
       if (!data.session) {
-        setNotice({ title: "Presque fini", body: "Vérifie ta boîte mail pour confirmer ton compte." })
+        setNotice({ title: t("login.almostDoneTitle"), body: t("login.almostDoneBody") })
         return
       }
       navigate("/tournois", { replace: true })
@@ -54,7 +55,7 @@ export default function Login() {
   async function forgot() {
     setError(null)
     if (!email.trim()) {
-      setError("Saisis ton adresse e-mail, puis clique à nouveau sur « Mot de passe oublié ? »")
+      setError(t("login.forgotNeedsEmail"))
       return
     }
     setBusy(true)
@@ -62,10 +63,10 @@ export default function Login() {
       redirectTo: window.location.origin + "/nouveau-mot-de-passe",
     })
     setBusy(false)
-    if (error) return setError(authErrorFr(error))
+    if (error) return setError(authError(error))
     setNotice({
-      title: "Regarde tes mails",
-      body: `Si un compte existe pour ${email.trim()}, un lien pour choisir un nouveau mot de passe vient d'être envoyé.`,
+      title: t("login.resetSentTitle"),
+      body: t("login.resetSentBody", { email: email.trim() }),
     })
   }
 
@@ -78,8 +79,8 @@ export default function Login() {
 
   return (
     <AppShell bare>
-      <PageTitle eyebrow={signup ? "Inscription" : "Connexion"}>
-        {signup ? "Crée ton compte" : "Entre sur le court"}
+      <PageTitle eyebrow={signup ? t("login.signupEyebrow") : t("login.signinEyebrow")}>
+        {signup ? t("login.signupTitle") : t("login.signinTitle")}
       </PageTitle>
 
       {notice ? (
@@ -93,28 +94,28 @@ export default function Login() {
             }}
             className="mt-4 min-h-11 text-sm underline underline-offset-4"
           >
-            Retour à la connexion
+            {t("login.backToLogin")}
           </button>
         </Box>
       ) : (
         <form onSubmit={submit} className="space-y-5">
           <Field
-            label="Adresse e-mail"
+            label={t("login.email")}
             type="email"
             required
             autoComplete="email"
             inputMode="email"
-            placeholder="toi@exemple.fr"
+            placeholder={t("login.emailPlaceholder")}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
           <div>
             <PasswordField
-              label="Mot de passe"
+              label={t("login.password")}
               required
               minLength={signup ? 8 : undefined}
               autoComplete={signup ? "new-password" : "current-password"}
-              hint={signup ? "8 caractères minimum" : undefined}
+              hint={signup ? t("login.passwordHint") : undefined}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
@@ -125,32 +126,27 @@ export default function Login() {
                 disabled={busy}
                 className="mt-1 min-h-11 text-sm underline underline-offset-4 disabled:opacity-60"
               >
-                Mot de passe oublié ?
+                {t("login.forgot")}
               </button>
             )}
           </div>
           {error && <ErrorBox message={error} />}
           <ChalkButton type="submit" disabled={busy} className="w-full">
-            {busy ? "Un instant…" : signup ? "Créer mon compte" : "Se connecter"}
+            {busy ? t("login.wait") : signup ? t("login.createAccount") : t("login.signIn")}
             <ArrowRight className="size-5" />
           </ChalkButton>
           <p className="text-center text-sm text-chalk/90">
-            {signup ? "Déjà un compte ?" : "Pas encore de compte ?"}{" "}
+            {signup ? t("login.haveAccount") : t("login.noAccount")}{" "}
             <button type="button" onClick={switchMode} className="min-h-11 font-bold underline underline-offset-4">
-              {signup ? "Se connecter" : "Créer un compte"}
+              {signup ? t("login.signIn") : t("login.switchToSignup")}
             </button>
           </p>
         </form>
       )}
 
       <section className="mt-10 border-t-2 border-chalk/60 pt-5 text-sm leading-relaxed text-chalk/90">
-        <h2 className="micro-label mb-2">Confidentialité</h2>
-        <p>
-          Nous collectons ton e-mail (pour te connecter), et à l'inscription ton classement, ta région, ta ville et ton
-          pays (pour situer le niveau et l'origine des joueurs du tournoi). Ces données restent privées : seul ton pseudo est
-          public. Tu peux supprimer ton compte à tout moment depuis ton profil ; tes données personnelles sont alors
-          effacées et tes participations passées restent affichées comme « utilisateur supprimé ».
-        </p>
+        <h2 className="micro-label mb-2">{t("login.privacyTitle")}</h2>
+        <p>{t("login.privacyBody")}</p>
       </section>
     </AppShell>
   )

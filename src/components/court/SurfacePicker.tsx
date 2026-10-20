@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 
+import { t } from "@/lib/i18n"
 import { setTheme, THEME_GROUPS, THEMES, useTheme, type ThemeId } from "@/lib/theme"
 import { cn } from "@/lib/utils"
 
@@ -8,22 +9,22 @@ export function SurfacePicker({ className, onPick }: { className?: string; onPic
   const current = useTheme()
 
   return (
-    <div role="radiogroup" aria-label="Surface" className={cn("space-y-3", className)}>
+    <div role="radiogroup" aria-label={t("theme.surface")} className={cn("space-y-3", className)}>
       {THEME_GROUPS.map((g) => (
         <div key={g.id} role="group" aria-label={g.label}>
           <span className="micro-label px-1 pb-1 text-[10px] tracking-[0.2em]">{g.label}</span>
           <div className="grid grid-cols-4 gap-1">
-            {THEMES.filter((t) => t.group === g.id).map((t) => {
-              const on = t.id === current
+            {THEMES.filter((x) => x.group === g.id).map((x) => {
+              const on = x.id === current
               return (
                 <button
-                  key={t.id}
+                  key={x.id}
                   type="button"
                   role="radio"
                   aria-checked={on}
-                  title={t.label}
+                  title={x.label}
                   onClick={() => {
-                    setTheme(t.id)
+                    setTheme(x.id)
                     onPick?.()
                   }}
                   className="group flex min-w-0 flex-col items-center gap-1.5 rounded-[2px] px-0.5 py-2 text-center hover:bg-chalk/10"
@@ -34,10 +35,10 @@ export function SurfacePicker({ className, onPick }: { className?: string; onPic
                       on ? "outline-2 outline-chalk" : "outline-1 outline-chalk/40 group-hover:outline-chalk/80",
                     )}
                   >
-                    <MiniCourt id={t.id} />
+                    <MiniCourt id={x.id} />
                   </span>
                   <span className={cn("text-[11px] leading-tight font-bold tracking-[0.04em] [font-stretch:85%]", on ? "text-chalk" : "text-chalk/80")}>
-                    {t.label}
+                    {x.label}
                   </span>
                 </button>
               )
@@ -87,7 +88,7 @@ export function SurfaceMenu() {
         type="button"
         aria-expanded={open}
         aria-haspopup="true"
-        aria-label={`Surface : ${THEMES.find((t) => t.id === current)!.label}`}
+        aria-label={t("theme.surfaceCurrent", { name: THEMES.find((x) => x.id === current)!.label })}
         onClick={() => setOpen((o) => !o)}
         className="group -mr-1.5 flex min-h-11 min-w-11 items-center justify-center rounded-[2px]"
       >
@@ -118,7 +119,7 @@ export function SurfaceMenu() {
 
 /** A landscape doubles court, drawn to scale (36 × 18 m, with a 3 m run-off). */
 export function MiniCourt({ id, small = false, className }: { id: ThemeId; small?: boolean; className?: string }) {
-  const { court, outer, line, stripe } = THEMES.find((t) => t.id === id)!
+  const { court, outer, line, stripe } = THEMES.find((x) => x.id === id)!
   return (
     <svg viewBox="0 0 42 24" aria-hidden="true" className={cn("block", small ? "h-[20px] w-[35px]" : "h-[30px] w-[52px]", className)}>
       <rect width="42" height="24" fill={outer} />

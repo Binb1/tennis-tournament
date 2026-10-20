@@ -8,6 +8,7 @@ import { CategoryBadge, StakeTag } from "@/components/court/PointsStake"
 import { MiniCourt } from "@/components/court/SurfacePicker"
 import { BallConfetti } from "@/components/pixel/Animations"
 import { useAuth } from "@/lib/auth"
+import { roundName, t, tr } from "@/lib/i18n"
 import { CATEGORIES, categoryOf, roundsOfDraw } from "@/lib/scoring"
 import { Once } from "@/lib/seen"
 import { isThemeId, themeLabel } from "@/lib/theme"
@@ -82,26 +83,26 @@ export default function Tournaments() {
 
   return (
     <AppShell>
-      <PageTitle eyebrow={`Saison ${new Date().getFullYear()}`}>Tournois</PageTitle>
+      <PageTitle eyebrow={t("tournaments.eyebrow", { year: new Date().getFullYear() })}>{t("tournaments.title")}</PageTitle>
       {error && <ErrorBox message={error} onRetry={() => setReload((n) => n + 1)} />}
       {!rows && !error && <Loading />}
       {rows && <ThisWeek rows={rows} now={now} />}
       {rows && <ToDo rows={rows} mine={mine} openRound={openRound} lastPicks={lastPicks} now={now} />}
-      {rows && rows.length === 0 && <p className="py-8 text-center text-chalk/85">Aucun tournoi pour l'instant.</p>}
+      {rows && rows.length === 0 && <p className="py-8 text-center text-chalk/85">{t("tournaments.empty")}</p>}
       {rows &&
         groupTournaments(rows).map(({ title, list }) => {
           return (
             <section key={title} className="mb-8">
               <h2 className="micro-label mb-3">{title}</h2>
               <div className="space-y-3">
-                {list.map((t) => (
+                {list.map((x) => (
                   <TournamentCard
-                    key={t.id}
-                    t={t}
-                    me={mine[t.id]}
+                    key={x.id}
+                    tour={x}
+                    me={mine[x.id]}
                     winners={winners}
-                    round={openRound[t.id]}
-                    last={mine[t.id] ? lastPicks[mine[t.id].entry_id] : undefined}
+                    round={openRound[x.id]}
+                    last={mine[x.id] ? lastPicks[mine[x.id].entry_id] : undefined}
                     now={now}
                   />
                 ))}
@@ -119,19 +120,19 @@ export default function Tournaments() {
  */
 function ThisWeek({ rows, now }: { rows: Row[]; now: number }) {
   const week = rows.filter(
-    (t) => !t.test && (t.status === "live" || (t.status === "registration" && !!t.starts_at && Date.parse(t.starts_at) - now < 7 * 24 * 3600 * 1000)),
+    (x) => !x.test && (x.status === "live" || (x.status === "registration" && !!x.starts_at && Date.parse(x.starts_at) - now < 7 * 24 * 3600 * 1000)),
   )
   if (!week.length) return null
   return (
     <section className="mb-8">
-      <h2 className="micro-label mb-3">Cette semaine</h2>
+      <h2 className="micro-label mb-3">{t("tournaments.thisWeek")}</h2>
       <ul className="grid grid-cols-2 gap-1.5 min-[520px]:grid-cols-4">
         {CATEGORIES.map((c) => {
-          const list = week.filter((t) => categoryOf(t.category).id === c.id)
+          const list = week.filter((x) => categoryOf(x.category).id === c.id)
           return (
             <li
               key={c.id}
-              title={list.map((t) => t.name).join(", ") || undefined}
+              title={list.map((x) => x.name).join(", ") || undefined}
               className={cn("border-2 border-chalk/90 border-l-[6px] px-2.5 py-2", !list.length && "opacity-45")}
               style={{ borderLeftColor: c.color }}
             >
@@ -140,7 +141,7 @@ function ThisWeek({ rows, now }: { rows: Row[]; now: number }) {
                 <span className="text-xs font-bold">×{c.mult}</span>
               </span>
               <span className="mt-1 block truncate text-xs">
-                {list.length ? `${list.length} ${list.length > 1 ? "tournois" : "tournoi"}` : "Aucun"}
+                {list.length ? t("tournaments.weekCount", { count: list.length }) : t("tournaments.weekNone")}
               </span>
             </li>
           )
@@ -171,40 +172,46 @@ function ToDo({
   now: number
 }) {
   const picks = rows
-    .flatMap((t) => {
-      const me = mine[t.id]
-      const round = pickable(t, openRound[t.id])
+    .flatMap((tour) => {
+      const me = mine[tour.id]
+      const round = pickable(tour, openRound[tour.id])
       if (!me?.alive || !round || lastPicks[me.entry_id]?.picked.includes(round.id)) return []
       const ms = new Date(round.locks_at).getTime() - now
-      return ms > 0 ? [{ t, round, ms }] : []
+      return ms > 0 ? [{ tour, round, ms }] : []
     })
     .sort((a, b) => a.ms - b.ms)
-  const joinable = picks.length ? [] : rows.filter((t) => t.status === "registration" && hasDraw(t) && !mine[t.id])
+  const joinable = picks.length ? [] : rows.filter((x) => x.status === "registration" && hasDraw(x) && !mine[x.id])
   if (!picks.length && !joinable.length) return null
 
   return (
     <section className="mb-8 border-l-4 border-ball bg-ink/70">
-      <h2 className="micro-label px-4 pt-3">{picks.length ? "À faire" : "Inscriptions ouvertes"}</h2>
+      <h2 className="micro-label px-4 pt-3">{picks.length ? t("tournaments.toDo") : t("tournaments.joinOpen")}</h2>
       <ul>
-        {picks.map(({ t, round, ms }) => (
-          <li key={t.id}>
-            <Link to={`/tournois/${t.id}`} className="flex min-h-11 items-center gap-3 px-4 py-2.5 hover:bg-chalk/10">
+        {picks.map(({ tour, round, ms }) => (
+          <li key={tour.id}>
+            <Link to={`/tournois/${tour.id}`} className="flex min-h-11 items-center gap-3 px-4 py-2.5 hover:bg-chalk/10">
               <span className="min-w-0 flex-1">
-                <span className="block font-bold">Choisis ton joueur · {round.name}</span>
+                <span className="block font-bold">{t("tournaments.pickPlayer", { round: roundName(round.name) })}</span>
                 <span className="block text-sm">
-                  <Flag code={t.country} className="mr-1" />
-                  {t.name} · verrouillage dans <span className="tabular-nums">{formatLeft(ms, false)}</span>
+                  <Flag code={tour.country} className="mr-1" />
+                  {tr("tournaments.locksIn", { name: tour.name, left: <span className="tabular-nums">{formatLeft(ms, false)}</span> })}
                 </span>
               </span>
               <ChevronRight className="size-5 shrink-0" />
             </Link>
           </li>
         ))}
-        {joinable.map((t) => (
-          <li key={t.id}>
-            <Link to={`/tournois/${t.id}`} className="flex min-h-11 items-center gap-3 px-4 py-2.5 hover:bg-chalk/10">
+        {joinable.map((tour) => (
+          <li key={tour.id}>
+            <Link to={`/tournois/${tour.id}`} className="flex min-h-11 items-center gap-3 px-4 py-2.5 hover:bg-chalk/10">
               <span className="min-w-0 flex-1 font-bold">
-                Rejoindre <Flag code={t.country} className="mx-0.5" /> {t.name}
+                {tr("tournaments.join", {
+                  name: (
+                    <>
+                      <Flag code={tour.country} className="mx-0.5" /> {tour.name}
+                    </>
+                  ),
+                })}
               </span>
               <ChevronRight className="size-5 shrink-0" />
             </Link>
@@ -216,57 +223,57 @@ function ToDo({
 }
 
 function TournamentCard({
-  t,
+  tour,
   me,
   winners,
   round,
   last,
   now,
 }: {
-  t: Row
+  tour: Row
   me?: EntryStatus
   winners: Set<string>
   round?: Round
   last?: LastPick
   now: number
 }) {
-  const count = t.entries[0]?.count ?? 0
-  const open = pickable(t, round)
+  const count = tour.entries[0]?.count ?? 0
+  const open = pickable(tour, round)
   const ms = open ? new Date(open.locks_at).getTime() - now : 0
   return (
-    <Link to={`/tournois/${t.id}`} className="block">
+    <Link to={`/tournois/${tour.id}`} className="block">
       <Box
-        className={cn("flex items-center gap-3 px-4 py-4 transition-colors hover:bg-chalk/10", !t.test && "border-l-[6px]")}
-        style={t.test ? undefined : { borderLeftColor: categoryOf(t.category).color }}
+        className={cn("flex items-center gap-3 px-4 py-4 transition-colors hover:bg-chalk/10", !tour.test && "border-l-[6px]")}
+        style={tour.test ? undefined : { borderLeftColor: categoryOf(tour.category).color }}
       >
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Tag tone="neutral">{statusLabel(t.status, hasDraw(t))}</Tag>
-            {t.test && <Tag tone="alert">Test</Tag>}
-            {!t.test && <StakeTag category={t.category} rounds={roundsOfDraw(t.draw_size)} />}
-            {me && <MyState status={t.status} me={me} winner={winners.has(me.entry_id)} />}
+            <Tag tone="neutral">{statusLabel(tour.status, hasDraw(tour))}</Tag>
+            {tour.test && <Tag tone="alert">{t("tournaments.test")}</Tag>}
+            {!tour.test && <StakeTag category={tour.category} rounds={roundsOfDraw(tour.draw_size)} />}
+            {me && <MyState status={tour.status} me={me} winner={winners.has(me.entry_id)} />}
           </div>
           <h3 className="mt-2 font-display text-2xl leading-tight [overflow-wrap:anywhere]">
-            {isThemeId(t.theme) && (
-              <span title={`Style ${themeLabel(t.theme)}`} className="mr-2 inline-block align-[0.1em]">
-                <MiniCourt id={t.theme} small className="outline outline-1 outline-chalk/50" />
+            {isThemeId(tour.theme) && (
+              <span title={t("tournaments.style", { name: themeLabel(tour.theme) })} className="mr-2 inline-block align-[0.1em]">
+                <MiniCourt id={tour.theme} small className="outline outline-1 outline-chalk/50" />
               </span>
             )}
-            <Flag code={t.country} className="mr-2" />
-            {t.name}
+            <Flag code={tour.country} className="mr-2" />
+            {tour.name}
           </h3>
           <p className="mt-1 text-sm text-chalk/85">
-            {t.tour} · {formatDate(t.starts_at)} · {count} {count > 1 ? "inscrits" : "inscrit"}
+            {tour.tour} · {formatDate(tour.starts_at)} · {t("tournaments.joinedCount", { count })}
           </p>
           {open && ms > 0 && (
             <p className="mt-1 text-sm font-bold">
-              {open.name} · verrouillage dans <span className="tabular-nums">{formatLeft(ms, false)}</span>
+              {tr("tournaments.locksIn", { name: roundName(open.name), left: <span className="tabular-nums">{formatLeft(ms, false)}</span> })}
             </p>
           )}
-          {!me && t.status === "live" && t.late_join && open && ms > 0 && (
-            <p className="mt-1 text-sm">Inscriptions encore ouvertes</p>
+          {!me && tour.status === "live" && tour.late_join && open && ms > 0 && (
+            <p className="mt-1 text-sm">{t("tournaments.lateJoinOpen")}</p>
           )}
-          {me && <MyPickLine me={me} last={last} open={open && ms > 0 ? open : undefined} live={t.status === "live"} />}
+          {me && <MyPickLine me={me} last={last} open={open && ms > 0 ? open : undefined} live={tour.status === "live"} />}
         </div>
         <ChevronRight className="size-5 shrink-0 text-chalk/80" />
       </Box>
@@ -282,14 +289,14 @@ export function MyPickLine({ me, last, open, live = false }: { me: EntryStatus; 
   if (me.alive && open && !last?.picked.includes(open.id)) {
     return (
       <p role="status" className="mt-3 border-l-4 border-ball bg-ink/70 px-3 py-2 text-sm font-medium">
-        Pas encore de choix · {open.name}
+        {t("tournaments.noPickYet", { round: roundName(open.name) })}
       </p>
     )
   }
   if (!me.alive && last?.roundIdx !== me.eliminated_round) {
     return (
       <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 border-l-4 border-chalk bg-brick/40 px-3 py-2 text-sm">
-        <span>Aucun choix au verrouillage</span>
+        <span>{t("tournaments.noPickAtLock")}</span>
         <ResultTag result="lost" />
       </p>
     )
@@ -297,7 +304,7 @@ export function MyPickLine({ me, last, open, live = false }: { me: EntryStatus; 
   if (!last) return null
   return (
     <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 border-l-4 border-chalk bg-brick/40 px-3 py-2 text-sm">
-      <span className="text-chalk/90">Ton choix · {last.roundName} :</span>
+      <span className="text-chalk/90">{t("tournaments.yourPick", { round: roundName(last.roundName) })}</span>
       <strong className="inline-flex items-center gap-1.5 font-bold">
         <Flag code={last.country} />
         {last.player}
@@ -317,8 +324,8 @@ export function MyPickLine({ me, last, open, live = false }: { me: EntryStatus; 
 
 /** `winner`: see fetchWinners (co-winners when nobody is alive at the end). */
 export function MyState({ status, me, winner }: { status: Tournament["status"]; me: EntryStatus; winner: boolean }) {
-  if (status === "registration") return <Tag tone="alive">Inscrit</Tag>
-  if (status === "finished" && winner) return <Tag tone="win">Vainqueur</Tag>
-  if (!me.alive) return <Tag tone="out">Éliminé</Tag>
-  return <Tag tone="alive">En vie</Tag>
+  if (status === "registration") return <Tag tone="alive">{t("tournaments.stateJoined")}</Tag>
+  if (status === "finished" && winner) return <Tag tone="win">{t("tournaments.stateWinner")}</Tag>
+  if (!me.alive) return <Tag tone="out">{t("tournaments.stateOut")}</Tag>
+  return <Tag tone="alive">{t("tournaments.stateAlive")}</Tag>
 }

@@ -4,13 +4,14 @@ import { ArrowRight } from "lucide-react"
 
 import { AppShell, ChalkButton, ErrorBox, Field, PageTitle } from "@/components/court/AppShell"
 import { useAuth } from "@/lib/auth"
+import { t, getLang } from "@/lib/i18n"
 import { supabase } from "@/lib/supabase"
 import { HandleField, parseSocials } from "@/components/court/Socials"
 
 export default function Welcome() {
   const { session, refreshProfile } = useAuth()
   const navigate = useNavigate()
-  const [form, setForm] = useState({ username: "", ranking: "", region: "", city: "", country: "France", x: "", instagram: "" })
+  const [form, setForm] = useState({ username: "", ranking: "", region: "", city: "", country: getLang() === "fr" ? "France" : "", x: "", instagram: "" })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -21,7 +22,7 @@ export default function Welcome() {
     if (!session) return
     const username = form.username.trim()
     if (username.length < 3 || username.length > 30) {
-      setError("Le pseudo doit faire entre 3 et 30 caractères.")
+      setError(t("welcome.usernameLength"))
       return
     }
     const socials = parseSocials(form)
@@ -37,7 +38,7 @@ export default function Welcome() {
     const { error: e1 } = await supabase.from("profiles").upsert({ id, username, ...handles })
     if (e1) {
       setSaving(false)
-      setError(e1.code === "23505" ? "Ce pseudo est déjà pris, choisis-en un autre." : e1.message)
+      setError(e1.code === "23505" ? t("welcome.usernameTaken") : e1.message)
       return
     }
     const { error: e2 } = await supabase.from("profiles_private").upsert({
@@ -46,7 +47,8 @@ export default function Welcome() {
       ranking: form.ranking.trim() || null,
       region: form.region.trim() || null,
       city: form.city.trim() || null,
-      country: form.country.trim() || "France",
+      // Required column: French players default to France, others may leave it empty.
+      country: form.country.trim() || (getLang() === "fr" ? "France" : ""),
     })
     if (e2) {
       setSaving(false)
@@ -59,37 +61,37 @@ export default function Welcome() {
 
   return (
     <AppShell bare>
-      <PageTitle eyebrow="Première visite">Bienvenue</PageTitle>
+      <PageTitle eyebrow={t("welcome.eyebrow")}>{t("welcome.title")}</PageTitle>
       <form onSubmit={submit} className="space-y-5">
         <Field
-          label="Pseudo"
+          label={t("welcome.username")}
           required
           minLength={3}
           maxLength={30}
           autoComplete="username"
           value={form.username}
           onChange={set("username")}
-          hint="Public, visible dans les classements."
+          hint={t("welcome.usernameHint")}
         />
         <div className="grid grid-cols-2 gap-4">
-          <HandleField label="X (Twitter)" placeholder="facultatif" value={form.x} onChange={set("x")} />
-          <HandleField label="Instagram" placeholder="facultatif" value={form.instagram} onChange={set("instagram")} />
+          <HandleField label="X (Twitter)" placeholder={t("welcome.optional")} value={form.x} onChange={set("x")} />
+          <HandleField label="Instagram" placeholder={t("welcome.optional")} value={form.instagram} onChange={set("instagram")} />
         </div>
-        <p className="-mt-3 text-xs text-chalk/75">Facultatif et public : un lien apparaît à côté de ton pseudo.</p>
+        <p className="-mt-3 text-xs text-chalk/75">{t("welcome.socialsHint")}</p>
         <div className="border-t-2 border-chalk/60 pt-5">
-          <p className="mb-4 text-sm text-chalk/85">Privé, visible par toi seul.</p>
+          <p className="mb-4 text-sm text-chalk/85">{t("welcome.privateNote")}</p>
           <div className="space-y-5">
-            <Field label="Classement" placeholder="ex. 15/2, NC" value={form.ranking} onChange={set("ranking")} />
+            <Field label={t("welcome.ranking")} placeholder={t("welcome.rankingPlaceholder")} value={form.ranking} onChange={set("ranking")} />
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Région" value={form.region} onChange={set("region")} />
-              <Field label="Ville" autoComplete="address-level2" value={form.city} onChange={set("city")} />
+              <Field label={t("welcome.region")} value={form.region} onChange={set("region")} />
+              <Field label={t("welcome.city")} autoComplete="address-level2" value={form.city} onChange={set("city")} />
             </div>
-            <Field label="Pays" autoComplete="country-name" value={form.country} onChange={set("country")} />
+            <Field label={t("welcome.country")} autoComplete="country-name" value={form.country} onChange={set("country")} />
           </div>
         </div>
         {error && <ErrorBox message={error} />}
         <ChalkButton type="submit" disabled={saving} className="w-full">
-          {saving ? "Enregistrement…" : "Entrer sur le court"}
+          {saving ? t("welcome.saving") : t("welcome.submit")}
           <ArrowRight className="size-5" />
         </ChalkButton>
       </form>

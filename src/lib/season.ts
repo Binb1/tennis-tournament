@@ -1,3 +1,4 @@
+import { locale, t } from "@/lib/i18n"
 import type { Category } from "@/lib/scoring"
 import { fetchAll, supabase } from "@/lib/supabase"
 
@@ -44,7 +45,7 @@ export function rankSeason(rows: SeasonRow[]): Ranked[] {
       b.tournaments_played - a.tournaments_played ||
       b.tournaments_won - a.tournaments_won ||
       b.rounds_won - a.rounds_won ||
-      a.username.localeCompare(b.username, "fr"),
+      a.username.localeCompare(b.username, locale()),
   )
   const same = (a: SeasonRow, b: SeasonRow) =>
     a.points === b.points &&
@@ -72,3 +73,12 @@ export async function fetchLastReset(): Promise<string | null> {
 }
 
 export const seasonsOf = (rows: { season: number }[]) => [...new Set(rows.map((r) => r.season))].sort((a, b) => b - a)
+
+/** Rank suffix in the current language: "er" / "e" (1er, 2e), "st" / "nd" / "rd" / "th", ".º". */
+export function rankSuffix(rank: number): string {
+  const form = new Intl.PluralRules(locale(), { type: "ordinal" }).select(rank)
+  return form === "one" ? t("common.ordOne") : form === "two" ? t("common.ordTwo") : form === "few" ? t("common.ordFew") : t("common.ordOther")
+}
+
+/** "1er", "2nd", "3.º": the rank with its suffix. */
+export const rankOrdinal = (rank: number) => `${rank}${rankSuffix(rank)}`
