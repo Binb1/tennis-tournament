@@ -1,52 +1,76 @@
 import { useEffect, useRef, useState } from "react"
 
 import { t } from "@/lib/i18n"
-import { setTheme, THEME_GROUPS, THEMES, useTheme, type ThemeId } from "@/lib/theme"
+import { dynamicTheme, setTheme, SLAMS, themeLabel, THEMES, useTheme, useThemeChoice, type ThemeChoice, type ThemeId } from "@/lib/theme"
 import { cn } from "@/lib/utils"
 
-/** Court surface picker: one labelled mini court per tournament, Grand Chelem then Masters 1000 (Profile, header menu). */
+/**
+ * Court surface picker (header menu): "dynamic" first (the live Masters 1000's style, else the next Slam's), then the
+ * four Grand Slams.
+ */
 export function SurfacePicker({ className, onPick }: { className?: string; onPick?: () => void }) {
-  const current = useTheme()
+  const current = useThemeChoice()
+  const dynamic = dynamicTheme()
+  const pick = (c: ThemeChoice) => {
+    setTheme(c)
+    onPick?.()
+  }
 
   return (
     <div role="radiogroup" aria-label={t("theme.surface")} className={cn("space-y-3", className)}>
-      {THEME_GROUPS.map((g) => (
-        <div key={g.id} role="group" aria-label={g.label}>
-          <span className="micro-label px-1 pb-1 text-[10px] tracking-[0.2em]">{g.label}</span>
-          <div className="grid grid-cols-4 gap-1">
-            {THEMES.filter((x) => x.group === g.id).map((x) => {
-              const on = x.id === current
-              return (
-                <button
-                  key={x.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={on}
-                  title={x.label}
-                  onClick={() => {
-                    setTheme(x.id)
-                    onPick?.()
-                  }}
-                  className="group flex min-w-0 flex-col items-center gap-1.5 rounded-[2px] px-0.5 py-2 text-center hover:bg-chalk/10"
-                >
-                  <span
-                    className={cn(
-                      "block rounded-[2px] outline outline-offset-2 transition-[outline-color]",
-                      on ? "outline-2 outline-chalk" : "outline-1 outline-chalk/40 group-hover:outline-chalk/80",
-                    )}
-                  >
-                    <MiniCourt id={x.id} />
-                  </span>
-                  <span className={cn("text-[11px] leading-tight font-bold tracking-[0.04em] [font-stretch:85%]", on ? "text-chalk" : "text-chalk/80")}>
-                    {x.label}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
+      <button
+        type="button"
+        role="radio"
+        aria-checked={current === "dynamic"}
+        onClick={() => pick("dynamic")}
+        className="group flex w-full items-center gap-3 rounded-[2px] px-2 py-2 text-left hover:bg-chalk/10"
+      >
+        <Swatch id={dynamic} on={current === "dynamic"} />
+        <span className="min-w-0">
+          <span className={cn("block text-[13px] font-bold tracking-[0.04em] [font-stretch:85%]", current === "dynamic" ? "text-chalk" : "text-chalk/80")}>
+            {t("theme.dynamic")} · {themeLabel(dynamic)}
+          </span>
+          <span className="block text-[11px] leading-snug text-chalk/70">{t("theme.dynamicHint")}</span>
+        </span>
+      </button>
+      <div role="group" aria-label={t("theme.groupSlam")}>
+        <span className="micro-label px-1 pb-1 text-[10px] tracking-[0.2em]">{t("theme.groupSlam")}</span>
+        <div className="grid grid-cols-4 gap-1">
+          {SLAMS.map(({ id }) => {
+            const on = id === current
+            return (
+              <button
+                key={id}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                title={themeLabel(id)}
+                onClick={() => pick(id)}
+                className="group flex min-w-0 flex-col items-center gap-1.5 rounded-[2px] px-0.5 py-2 text-center hover:bg-chalk/10"
+              >
+                <Swatch id={id} on={on} />
+                <span className={cn("text-[11px] leading-tight font-bold tracking-[0.04em] [font-stretch:85%]", on ? "text-chalk" : "text-chalk/80")}>
+                  {themeLabel(id)}
+                </span>
+              </button>
+            )
+          })}
         </div>
-      ))}
+      </div>
     </div>
+  )
+}
+
+function Swatch({ id, on }: { id: ThemeId; on: boolean }) {
+  return (
+    <span
+      className={cn(
+        "block shrink-0 rounded-[2px] outline outline-offset-2 transition-[outline-color]",
+        on ? "outline-2 outline-chalk" : "outline-1 outline-chalk/40 group-hover:outline-chalk/80",
+      )}
+    >
+      <MiniCourt id={id} />
+    </span>
   )
 }
 

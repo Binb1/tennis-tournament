@@ -9,6 +9,8 @@ export default ns(
     rome: "Rome",
     surface: "Surface",
     surfaceCurrent: "Surface : {name}",
+    dynamic: "Dynamique",
+    dynamicHint: "Le Masters 1000 en cours, sinon le prochain Grand Chelem",
   },
   {
     groupSlam: "Grand Slam",
@@ -17,6 +19,8 @@ export default ns(
     rome: "Rome",
     surface: "Surface",
     surfaceCurrent: "Surface: {name}",
+    dynamic: "Dynamic",
+    dynamicHint: "The Masters 1000 being played, else the next Grand Slam",
   },
   {
     groupSlam: "Grand Slam",
@@ -25,5 +29,7 @@ export default ns(
     rome: "Roma",
     surface: "Superficie",
     surfaceCurrent: "Superficie: {name}",
+    dynamic: "Dinámico",
+    dynamicHint: "El Masters 1000 en juego o, si no, el próximo Grand Slam",
   },
 )

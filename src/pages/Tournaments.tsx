@@ -136,12 +136,13 @@ function ThisWeek({ rows, now }: { rows: Row[]; now: number }) {
               className={cn("border-2 border-chalk/90 border-l-[6px] px-2.5 py-2", !list.length && "opacity-45")}
               style={{ borderLeftColor: c.color }}
             >
-              <span className="flex items-center justify-between gap-2">
-                <CategoryBadge category={c.id} />
-                <span className="text-xs font-bold">×{c.mult}</span>
-              </span>
-              <span className="mt-1 block truncate text-xs">
-                {list.length ? t("tournaments.weekCount", { count: list.length }) : t("tournaments.weekNone")}
+              {/* Badge alone on its line: "Masters 1000" / "Grand Slam" fill a quarter of the row. */}
+              <CategoryBadge category={c.id} />
+              <span className="mt-1.5 flex items-baseline justify-between gap-2 text-xs">
+                <span className="min-w-0 truncate">
+                  {list.length ? t("tournaments.weekCount", { count: list.length }) : t("tournaments.weekNone")}
+                </span>
+                <span className="shrink-0 font-bold">×{c.mult}</span>
               </span>
             </li>
           )
@@ -243,22 +244,23 @@ function TournamentCard({
   return (
     <Link to={`/tournois/${tour.id}`} className="block">
       <Box
-        className={cn("flex items-center gap-3 px-4 py-4 transition-colors hover:bg-chalk/10", !tour.test && "border-l-[6px]")}
+        className={cn("relative flex items-center gap-3 px-4 py-4 transition-colors hover:bg-chalk/10", !tour.test && "border-l-[6px]")}
         style={tour.test ? undefined : { borderLeftColor: categoryOf(tour.category).color }}
       >
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
+          {/* The tournament's own style, in the top corner. */}
+          {isThemeId(tour.theme) && (
+            <span title={t("tournaments.style", { name: themeLabel(tour.theme) })} className="absolute top-3 right-3">
+              <MiniCourt id={tour.theme} small className="outline outline-1 outline-chalk/50" />
+            </span>
+          )}
+          <div className={cn("flex flex-wrap items-center gap-2", isThemeId(tour.theme) && "pr-10")}>
             <Tag tone="neutral">{statusLabel(tour.status, hasDraw(tour))}</Tag>
             {tour.test && <Tag tone="alert">{t("tournaments.test")}</Tag>}
             {!tour.test && <StakeTag category={tour.category} rounds={roundsOfDraw(tour.draw_size)} />}
             {me && <MyState status={tour.status} me={me} winner={winners.has(me.entry_id)} />}
           </div>
           <h3 className="mt-2 font-display text-2xl leading-tight [overflow-wrap:anywhere]">
-            {isThemeId(tour.theme) && (
-              <span title={t("tournaments.style", { name: themeLabel(tour.theme) })} className="mr-2 inline-block align-[0.1em]">
-                <MiniCourt id={tour.theme} small className="outline outline-1 outline-chalk/50" />
-              </span>
-            )}
             <Flag code={tour.country} className="mr-2" />
             {tour.name}
           </h3>

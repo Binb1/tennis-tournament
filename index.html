@@ -25,8 +25,16 @@
     <script>
       // Court surface (src/lib/theme.ts), applied before first paint.
       try {
-        // Saved choice, else the last known live tournament's style (refreshed by loadLiveTheme).
-        var t = localStorage.getItem("tiebreakers-theme") || localStorage.getItem("tiebreakers-live-theme")
+        // A saved Slam, else dynamic: the cached live Masters 1000 / next Slam (refreshed by loadLiveTheme), else the
+        // next Slam on the calendar (same end dates as SLAMS in theme.ts).
+        var t = localStorage.getItem("tiebreakers-theme")
+        if (!/^(ao|clay|wimbledon|usopen)$/.test(t || "")) {
+          t = localStorage.getItem("tiebreakers-live-theme")
+          if (!t) {
+            var n = new Date(), md = (n.getMonth() + 1) * 100 + n.getDate()
+            t = md < 203 ? "ao" : md < 610 ? "clay" : md < 716 ? "wimbledon" : md < 912 ? "usopen" : "ao"
+          }
+        }
         var c = {
           usopen: "#0b1f3a", ao: "#062a4d", wimbledon: "#0c3b1f", indianwells: "#1b3a2b", miami: "#0a3140",
           montecarlo: "#0a2d5c", madrid: "#2a0a1f", rome: "#1a3a2a", canada: "#b0162f", cincinnati: "#13301f",
