@@ -385,26 +385,27 @@ const TAB_OF: Record<string, Tab> = { choix: "pick", classement: "board", tablea
 
 function Tabs({ value, onChange }: { value: Tab; onChange: (v: Tab) => void }) {
   const tabs = [
-    ["pick", t("tournament.myPick")],
-    ["board", t("tournament.tabBoard")],
-    ["draw", t("tournament.tabDraw")],
+    ["pick", t("tournament.tabPick"), t("tournament.tabPickHint")],
+    ["board", t("tournament.tabBoard"), t("tournament.tabBoardHint")],
+    ["draw", t("tournament.tabDraw"), t("tournament.tabDrawHint")],
   ] as const
-  // Three court boxes separated by chalk lines.
+  // Three court boxes separated by chalk lines; the small line says whose it is (this game, or the real tournament).
   return (
     <div role="tablist" className="grid grid-cols-3 border-2 border-chalk/90">
-      {tabs.map(([key, label], i) => (
+      {tabs.map(([key, label, hint], i) => (
         <button
           key={key}
           role="tab"
           aria-selected={value === key}
           onClick={() => onChange(key)}
           className={cn(
-            "min-h-11 px-2 py-2.5 text-[12px] font-bold tracking-[0.14em] uppercase transition-colors [font-stretch:85%]",
+            "min-h-11 px-2 py-2 transition-colors",
             i > 0 && "border-l-2 border-chalk/90",
             value === key ? "bg-chalk text-ink" : "hover:bg-chalk/10",
           )}
         >
-          {label}
+          <span className="block text-[12px] font-bold tracking-[0.14em] uppercase [font-stretch:85%]">{label}</span>
+          <span className={cn("block text-[11px] leading-tight", value === key ? "text-ink/70" : "text-chalk/75")}>{hint}</span>
         </button>
       ))}
     </div>
@@ -992,7 +993,7 @@ function Planner({ data, d, onChanged, onClose }: { data: Data; d: Derived; onCh
  * Keeps the given round's pick in view: centred vertically, scrolled sideways only if hidden.
  */
 function MyBracket({ data, d, round, boxClassName }: { data: Data; d: Derived; round?: Round | null; boxClassName?: string }) {
-  const [from, setFrom] = useState(0)
+  const from = inPlayFrom(data)
   const drawRef = useRef<HTMLDivElement>(null)
   const pickedId = round ? d.myPicks.get(round.id) : undefined
   const slotKey = round && pickedId ? [...d.myPath].find(([k, pid]) => pid === pickedId && k.startsWith(`${round.id}:`))?.[0] : undefined
@@ -1013,30 +1014,10 @@ function MyBracket({ data, d, round, boxClassName }: { data: Data; d: Derived; r
   if (data.matches.length === 0) return <Empty>{t("tournament.noMatches")}</Empty>
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-chalk/90">
-        <span className="inline-flex items-center gap-1">
-          <span className="inline-block h-3 w-1 bg-ball" />
-          <strong>{t("tournament.legendMine")}</strong>
-          <ChevronRight className="size-3.5 text-ball" aria-hidden="true" />
-          {t("tournament.legendThrough")}
-        </span>
-        <span className="text-chalk/55 line-through">{t("tournament.legendLoses")}</span>
-        <span>
-          <i>{t("tournament.legendPlanned")}</i> · <Check className="inline size-3.5 align-[-0.15em]" aria-hidden="true" />{" "}
-          {t("tournament.legendPlayed")}
-        </span>
-      </div>
-      <div role="group" aria-label={t("tournament.showFrom")} className="flex flex-wrap items-center gap-1.5">
-        <span className="micro-label mr-1">{t("tournament.since")}</span>
-        {data.rounds.slice(0, -1).map((r, i) => (
-          <ChipButton key={r.id} on={i === from} onClick={() => setFrom(i)}>
-            {roundName(r.name)}
-          </ChipButton>
-        ))}
-      </div>
+      <p className="text-sm text-chalk/90">{t("tournament.myBracketHint")}</p>
+      <BracketLegend predicted />
       <div ref={drawRef} className={cn("overflow-auto overscroll-contain border-2 border-chalk/90", boxClassName)}>
         <Bracket
-          key={from}
           rounds={data.rounds.slice(from)}
           before={data.rounds[from - 1]}
           matches={data.matches}
@@ -1047,6 +1028,40 @@ function MyBracket({ data, d, round, boxClassName }: { data: Data; d: Derived; r
           className="overflow-visible border-0"
         />
       </div>
+    </div>
+  )
+}
+
+/**
+ * Where a bracket starts: the first round not fully played (the rounds before it are history, in "Mon parcours" and the
+ * list view). A finished tournament starts at the quarter-finals.
+ */
+function inPlayFrom(data: Data) {
+  const i = data.rounds.findIndex((r) => {
+    const ms = data.matches.filter((m) => m.round_id === r.id)
+    return ms.length === 0 || ms.some((m) => m.status !== "done")
+  })
+  return i >= 0 ? Math.min(i, data.rounds.length - 1) : Math.max(0, data.rounds.length - 3)
+}
+
+/** Real results vs my picks: a check is a played match, yellow is mine (with ▸ when it's only my prediction). */
+function BracketLegend({ predicted = false }: { predicted?: boolean }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-chalk/90">
+      <span className="inline-flex items-center gap-1">
+        <Check className="size-3.5" aria-hidden="true" />
+        {t("tournament.legendReal")}
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="inline-block h-3 w-1 bg-ball" aria-hidden="true" />
+        {t("tournament.legendMine")}
+      </span>
+      {predicted && (
+        <span className="inline-flex items-center gap-1">
+          <ChevronRight className="size-3.5 text-ball" aria-hidden="true" />
+          {t("tournament.legendPredicted")}
+        </span>
+      )}
     </div>
   )
 }
@@ -1580,7 +1595,7 @@ function Draw({ data, d }: { data: Data; d: Derived }) {
   const [filter, setFilter] = useState<DrawFilter>("all")
   const [view, setView] = useState<"list" | "tree">("list")
   const [open, setOpen] = useState<string | null>(null)
-  const [from, setFrom] = useState(0)
+  const [withPlayed, setWithPlayed] = useState(false)
   const round = data.rounds.find((r) => r.id === roundId) ?? fallback
   if (!round) return <Empty>{t("tournament.drawNotPublished")}</Empty>
 
@@ -1596,6 +1611,8 @@ function Draw({ data, d }: { data: Data; d: Derived }) {
     />
   )
   if (view === "tree") {
+    const inPlay = inPlayFrom(data)
+    const from = withPlayed ? 0 : inPlay
     return (
       <div className="space-y-4">
         {toggle}
@@ -1603,13 +1620,14 @@ function Draw({ data, d }: { data: Data; d: Derived }) {
           <Empty>{t("tournament.noMatches")}</Empty>
         ) : (
           <>
-            <div role="group" aria-label={t("tournament.showFrom")} className="flex flex-wrap items-center gap-1.5">
-              <span className="micro-label mr-1">{t("tournament.since")}</span>
-              {data.rounds.slice(0, -1).map((r, i) => (
-                <ChipButton key={r.id} on={i === from} onClick={() => setFrom(i)}>
-                  {roundName(r.name)}
+            <p className="text-sm text-chalk/90">{t("tournament.drawHint")}</p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <BracketLegend />
+              {inPlay > 0 && (
+                <ChipButton on={withPlayed} onClick={() => setWithPlayed(!withPlayed)}>
+                  {t("tournament.showPlayed")}
                 </ChipButton>
-              ))}
+              )}
             </div>
             {/* Keyed by the start round: a new start remounts the box, so it starts scrolled to the left. */}
             <Bracket
