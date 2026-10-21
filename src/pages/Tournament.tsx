@@ -265,6 +265,12 @@ function derive(data: Data, uid: string | undefined, now: number) {
     const idx = idxOf.get(r.round_id)
     if (r.result === "lost" && idx && idx < (lostRound.get(r.player_id) ?? Infinity)) lostRound.set(r.player_id, idx)
   }
+  // Withdrawn: once the draw is out, a player in no match of it (replaced by a lucky loser) is out before round 1,
+  // lost at 0, as in entry_status (migration 0018).
+  if (data.matches.length > 0) {
+    const inDraw = new Set(data.matches.flatMap((m) => [m.player1_id, m.player2_id]))
+    for (const p of data.players) if (!inDraw.has(p.id) && !lostRound.has(p.id)) lostRound.set(p.id, 0)
+  }
 
   const picksByEntry = new Map<string, Map<string, string>>()
   for (const p of data.picks) {
@@ -879,6 +885,7 @@ function PlayerPicker({
   // Why a player can't be picked, or null if he can.
   const reason = (p: Player) => {
     const lost = d.lostRound.get(p.id)
+    if (lost === 0) return t("tournament.withdrawn")
     if (lost) return t("tournament.outAt", { round: roundLabel(lost) })
     if (d.exempt(p.id, round)) return t("tournament.byeAt", { round: roundName(round.name) })
     const used = others.find((o) => o.pid === p.id)
