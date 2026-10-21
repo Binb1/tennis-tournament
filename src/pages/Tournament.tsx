@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react"
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom"
-import { ArrowLeft, Check, ChevronRight, Lock, LockOpen, Minus, X } from "lucide-react"
+import { ArrowLeft, Check, ChevronRight, Minus, Pencil, X } from "lucide-react"
 
 import { AppShell, Box, ChalkButton, ErrorBox, FindMe, LineButton, Loading, ME_ROW, PageTitle, ResultTag, SearchInput, Tag } from "@/components/court/AppShell"
 import { Bracket } from "@/components/court/Bracket"
@@ -588,7 +588,17 @@ function MyPick({ data, d, onChanged, onPlan }: { data: Data; d: Derived; onChan
   )
 }
 
-const RUN_ICON = { won: Check, lost: X, pending: Lock, missing: Minus, waived: Check, open: LockOpen } as const
+/** In play: a live dot, nothing like the pencil of a round still open to change. */
+function LiveDot({ className }: { className?: string }) {
+  return (
+    <span className={cn("relative inline-flex items-center justify-center", className)}>
+      <span className="absolute size-2.5 rounded-full bg-ball/60 motion-safe:animate-ping" />
+      <span className="relative size-2.5 rounded-full bg-ball" />
+    </span>
+  )
+}
+
+const RUN_ICON = { won: Check, lost: X, pending: LiveDot, missing: Minus, waived: Check, open: Pencil } as const
 
 /**
  * My run, one row per round, each saying where it stands: played (won / lost), locked and in play, or open until its
@@ -634,7 +644,7 @@ function RunList({
               : t(CHIP_LABEL[state])
         const body = (
           <>
-            <Icon aria-hidden="true" className={cn("size-4 shrink-0", state === "won" && "text-ball", state === "lost" && "opacity-60")} />
+            <Icon aria-hidden="true" className={cn("size-4 shrink-0", state === "won" && "text-ball", state === "lost" && "opacity-60", isOpen && "opacity-70")} />
             <span className="min-w-0 flex-1">
               <span className="block text-[11px] font-bold tracking-[0.08em] uppercase opacity-80 [font-stretch:85%]">
                 {roundName(round.name)}
