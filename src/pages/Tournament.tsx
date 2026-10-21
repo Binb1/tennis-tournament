@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react"
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom"
-import { ArrowLeft, Check, ChevronRight } from "lucide-react"
+import { ArrowLeft, Check, ChevronRight, Lock, LockOpen, Minus, X } from "lucide-react"
 
 import { AppShell, Box, ChalkButton, ErrorBox, FindMe, LineButton, Loading, ME_ROW, PageTitle, ResultTag, SearchInput, Tag } from "@/components/court/AppShell"
 import { Bracket } from "@/components/court/Bracket"
@@ -476,16 +476,15 @@ function MyPick({ data, d, onChanged, onPlan }: { data: Data; d: Derived; onChan
     )
   }
 
-  // History (locked rounds); the open rounds are in the grid below.
+  // History (locked rounds); the open rounds follow it in the run list.
   const trail = d.trail(d.myEntry.id).filter((s) => d.locked(s.round))
   const alive = d.myStatus?.alive ?? true
   const pickedId = round ? d.myPicks.get(round.id) : undefined
   const isCurrent = !!round && round.id === d.currentRound?.id
   const filled = openRounds.filter((r) => d.myPicks.has(r.id)).length
-  // Status line: the last locked round, whose result is the one to wait for.
+  // The last locked round: the result to wait for, animated once it is in.
   const lockedRounds = data.rounds.filter(d.locked)
   const statusRound = status === "live" ? lockedRounds[lockedRounds.length - 1] : undefined
-  const statusPid = statusRound ? d.myPicks.get(statusRound.id) : undefined
   const roundLabel = (idx: number) => {
     const name = d.roundByIdx.get(idx)?.name
     return name ? roundName(name) : t("tournament.roundN", { n: idx })
@@ -506,38 +505,41 @@ function MyPick({ data, d, onChanged, onPlan }: { data: Data; d: Derived; onChan
   }
 
   const FillButton = filled < openRounds.length ? ChalkButton : LineButton
-  // The round in play gets the full line below the chips, not a chip of its own.
-  const past = statusPid ? trail.filter((s) => s.round.id !== statusRound!.id) : trail
 
-  // Top to bottom: my run so far (ending with the round in play), the champion side bet, then the next round to pick.
+  // Top to bottom: the champion side bet, my run (every round, with where it stands), then the selected round to pick.
   return (
     <div className="space-y-6">
-      {trail.length > 0 && (
-        <section className="space-y-2">
-          <h2 className="micro-label">{t("tournament.myPath")}</h2>
-          {past.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {past.map((s) => (
-                <Chip key={s.round.id} step={s} withPlayer />
-              ))}
-            </div>
-          )}
-          {statusRound && statusPid && (
-            <div className="flex items-center gap-3 border-l-4 border-chalk bg-brick/40 px-4 py-3 text-sm">
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-                <span>{t("tournament.myPickRound", { round: roundName(statusRound.name) })}</span>
-                <strong className="font-bold">
-                  <PlayerName p={d.playerById.get(statusPid)} />
-                </strong>
-                <ResultTag result={d.pickResult(statusPid, statusRound)} />
-              </div>
-              <ResultMoment id={`${d.myEntry.id}:${statusRound.id}`} result={d.pickResult(statusPid, statusRound)} />
-            </div>
-          )}
+      <ChampionCard data={data} d={d} onChanged={onChanged} />
+
+      {(trail.length > 0 || (alive && round)) && (
+        <section ref={gridRef} className="scroll-mt-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="micro-label">{t("tournament.myPath")}</h2>
+            {alive && round && (
+              <Segmented
+                label={t("tournament.myPicksView")}
+                value={view}
+                onChange={setView}
+                options={[
+                  ["list", t("tournament.viewList")],
+                  ["tree", t("tournament.viewBracket")],
+                ]}
+              />
+            )}
+          </div>
+          <RunList
+            d={d}
+            entryId={d.myEntry.id}
+            past={trail}
+            open={alive ? openRounds : []}
+            selected={round?.id}
+            onSelect={setRoundId}
+            resultRound={statusRound}
+          />
+          {alive && openRounds.length > 1 && <p className="text-xs text-chalk/85">{t("tournament.runHint")}</p>}
+          {alive && round && view === "tree" && <MyBracket data={data} d={d} round={round} boxClassName="max-h-[70svh]" />}
         </section>
       )}
-
-      <ChampionCard data={data} d={d} onChanged={onChanged} />
 
       {!alive ? (
         <Box className="px-4 py-5">
@@ -550,14 +552,6 @@ function MyPick({ data, d, onChanged, onPlan }: { data: Data; d: Derived; onChan
         <Empty>{t("tournament.noOpenRound")}</Empty>
       ) : (
         <>
-          <LockBlock round={round} planned={!isCurrent} points={d.pointsOf(round)} />
-
-          {stale.length > 0 && (
-            <div role="alert" className="border-l-4 border-ball bg-ink/70 px-4 py-3 text-sm font-medium">
-              {t("tournament.stale", { rounds: stale.map((r) => roundName(r.name)).join(", ") })}
-            </div>
-          )}
-
           {/* Main call to action while rounds are missing; once all are filled, just a way back in. */}
           {openRounds.length > 1 && (
             <FillButton onClick={onPlan} className="w-full">
@@ -568,22 +562,13 @@ function MyPick({ data, d, onChanged, onPlan }: { data: Data; d: Derived; onChan
             </FillButton>
           )}
 
-          <section ref={gridRef} className="scroll-mt-4 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="micro-label">{t("tournament.upcoming")}</h2>
-              <Segmented
-                label={t("tournament.myPicksView")}
-                value={view}
-                onChange={setView}
-                options={[
-                  ["list", t("tournament.viewList")],
-                  ["tree", t("tournament.viewBracket")],
-                ]}
-              />
+          <LockBlock round={round} planned={!isCurrent} points={d.pointsOf(round)} />
+
+          {stale.length > 0 && (
+            <div role="alert" className="border-l-4 border-ball bg-ink/70 px-4 py-3 text-sm font-medium">
+              {t("tournament.stale", { rounds: stale.map((r) => roundName(r.name)).join(", ") })}
             </div>
-            <RoundGrid rounds={openRounds} d={d} selected={round.id} onSelect={setRoundId} />
-            {view === "tree" && <MyBracket data={data} d={d} round={round} boxClassName="max-h-[70svh]" />}
-          </section>
+          )}
 
           {!pickedId &&
             (isCurrent ? (
@@ -600,6 +585,94 @@ function MyPick({ data, d, onChanged, onPlan }: { data: Data; d: Derived; onChan
         </>
       )}
     </div>
+  )
+}
+
+const RUN_ICON = { won: Check, lost: X, pending: Lock, missing: Minus, waived: Check, open: LockOpen } as const
+
+/**
+ * My run, one row per round, each saying where it stands: played (won / lost), locked and in play, or open until its
+ * lock (tap to pick it below). Rounds after an elimination aren't listed.
+ */
+function RunList({
+  d,
+  entryId,
+  past,
+  open,
+  selected,
+  onSelect,
+  resultRound,
+}: {
+  d: Derived
+  entryId: string
+  /** Locked rounds, as in the trail. */
+  past: TrailStep[]
+  open: Round[]
+  selected?: string
+  onSelect: (id: string) => void
+  /** The last locked round: its result plays the little animation. */
+  resultRound?: Round
+}) {
+  const now = useNow(30_000)
+  const rows = [
+    ...past.map((s) => ({ round: s.round, state: s.state, pid: s.player?.id })),
+    ...open.map((r) => ({ round: r, state: "open" as const, pid: d.myPicks.get(r.id) })),
+  ]
+  if (rows.length === 0) return null
+  return (
+    <ol className="border-2 border-chalk/90">
+      {rows.map(({ round, state, pid }) => {
+        const Icon = RUN_ICON[state]
+        const isOpen = state === "open"
+        const on = isOpen && round.id === selected
+        const out = isOpen && !!pid && d.lostRound.has(pid)
+        const status =
+          state === "pending"
+            ? t("tournament.runInPlay")
+            : isOpen
+              ? t("tournament.runLocksIn", { left: formatLeft(new Date(round.locks_at).getTime() - now, false) })
+              : t(CHIP_LABEL[state])
+        const body = (
+          <>
+            <Icon aria-hidden="true" className={cn("size-4 shrink-0", state === "won" && "text-ball", state === "lost" && "opacity-60")} />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[11px] font-bold tracking-[0.08em] uppercase opacity-80 [font-stretch:85%]">
+                {roundName(round.name)}
+              </span>
+              {pid ? (
+                <PlayerName p={d.playerById.get(pid)} className={cn("text-sm font-semibold", (state === "lost" || out) && "line-through")} />
+              ) : (
+                <span className={cn("text-sm", isOpen ? "font-semibold text-ball" : "opacity-80")}>
+                  {isOpen ? t("tournament.chipOpen") : "–"}
+                </span>
+              )}
+            </span>
+            <span className="shrink-0 text-right text-[11px] font-bold tracking-[0.08em] uppercase [font-stretch:85%]">{status}</span>
+            {round.id === resultRound?.id && pid && <ResultMoment id={`${entryId}:${round.id}`} result={d.pickResult(pid, round)} />}
+          </>
+        )
+        const row = "flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left"
+        return (
+          <li
+            key={round.id}
+            className={cn(
+              "border-t-2 border-chalk/40 first:border-t-0",
+              state === "lost" && "text-chalk/70",
+              state === "pending" && "bg-brick/40 shadow-[inset_4px_0_0_var(--color-chalk)]",
+              on && "bg-chalk text-ink",
+            )}
+          >
+            {isOpen ? (
+              <button onClick={() => onSelect(round.id)} aria-pressed={on} className={cn(row, !on && "hover:bg-chalk/10")}>
+                {body}
+              </button>
+            ) : (
+              <div className={row}>{body}</div>
+            )}
+          </li>
+        )
+      })}
+    </ol>
   )
 }
 
