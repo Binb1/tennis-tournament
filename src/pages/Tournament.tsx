@@ -505,41 +505,39 @@ function MyPick({ data, d, onChanged, onPlan }: { data: Data; d: Derived; onChan
     gridRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
   }
 
+  const FillButton = filled < openRounds.length ? ChalkButton : LineButton
+  // The round in play gets the full line below the chips, not a chip of its own.
+  const past = statusPid ? trail.filter((s) => s.round.id !== statusRound!.id) : trail
+
+  // Top to bottom: my run so far (ending with the round in play), the champion side bet, then the next round to pick.
   return (
     <div className="space-y-6">
-      {alive && round && <LockBlock round={round} planned={!isCurrent} points={d.pointsOf(round)} />}
-
-      {alive && stale.length > 0 && (
-        <div role="alert" className="border-l-4 border-ball bg-ink/70 px-4 py-3 text-sm font-medium">
-          {t("tournament.stale", { rounds: stale.map((r) => roundName(r.name)).join(", ") })}
-        </div>
+      {trail.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="micro-label">{t("tournament.myPath")}</h2>
+          {past.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {past.map((s) => (
+                <Chip key={s.round.id} step={s} withPlayer />
+              ))}
+            </div>
+          )}
+          {statusRound && statusPid && (
+            <div className="flex items-center gap-3 border-l-4 border-chalk bg-brick/40 px-4 py-3 text-sm">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+                <span>{t("tournament.myPickRound", { round: roundName(statusRound.name) })}</span>
+                <strong className="font-bold">
+                  <PlayerName p={d.playerById.get(statusPid)} />
+                </strong>
+                <ResultTag result={d.pickResult(statusPid, statusRound)} />
+              </div>
+              <ResultMoment id={`${d.myEntry.id}:${statusRound.id}`} result={d.pickResult(statusPid, statusRound)} />
+            </div>
+          )}
+        </section>
       )}
 
       <ChampionCard data={data} d={d} onChanged={onChanged} />
-
-      {statusRound && statusPid && (
-        <div className="flex items-center gap-3 border-l-4 border-chalk bg-brick/40 px-4 py-3 text-sm">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-            <span>{t("tournament.myPickRound", { round: roundName(statusRound.name) })}</span>
-            <strong className="font-bold">
-              <PlayerName p={d.playerById.get(statusPid)} />
-            </strong>
-            <ResultTag result={d.pickResult(statusPid, statusRound)} />
-          </div>
-          <ResultMoment id={`${d.myEntry.id}:${statusRound.id}`} result={d.pickResult(statusPid, statusRound)} />
-        </div>
-      )}
-
-      {trail.length > 0 && (
-        <section>
-          <h2 className="micro-label mb-2">{t("tournament.myPath")}</h2>
-          <div className="flex flex-wrap gap-1.5">
-            {trail.map((s) => (
-              <Chip key={s.round.id} step={s} withPlayer />
-            ))}
-          </div>
-        </section>
-      )}
 
       {!alive ? (
         <Box className="px-4 py-5">
@@ -552,13 +550,22 @@ function MyPick({ data, d, onChanged, onPlan }: { data: Data; d: Derived; onChan
         <Empty>{t("tournament.noOpenRound")}</Empty>
       ) : (
         <>
+          <LockBlock round={round} planned={!isCurrent} points={d.pointsOf(round)} />
+
+          {stale.length > 0 && (
+            <div role="alert" className="border-l-4 border-ball bg-ink/70 px-4 py-3 text-sm font-medium">
+              {t("tournament.stale", { rounds: stale.map((r) => roundName(r.name)).join(", ") })}
+            </div>
+          )}
+
+          {/* Main call to action while rounds are missing; once all are filled, just a way back in. */}
           {openRounds.length > 1 && (
-            <ChalkButton onClick={onPlan} className="w-full">
+            <FillButton onClick={onPlan} className="w-full">
               {t("tournament.fillAll")}
               <span className="ml-2 tabular-nums opacity-75">
                 {filled}/{openRounds.length}
               </span>
-            </ChalkButton>
+            </FillButton>
           )}
 
           <section ref={gridRef} className="scroll-mt-4 space-y-3">
