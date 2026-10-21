@@ -3,6 +3,8 @@
 --   * Once the tournament's draw is out (any match), a player in none of its matches is out before round 1 (lost at 0).
 --   * entry_status: a pick on him is lost as soon as its round locks.
 --   * make_pick refuses him.
+-- And the round being picked comes first: a player queued in another open round moves here (that round goes back to
+-- "to pick") instead of being refused. Only a locked round's pick still blocks him ("déjà choisi").
 
 -- Same as 0011, plus the withdrawn players in lost_at.
 create or replace view entry_status with (security_invoker = false) as
@@ -49,7 +51,7 @@ select
 from entries e
 left join elim el on el.entry_id = e.id;
 
--- Same as 0016, plus: not in the published draw.
+-- Same as 0016, plus: not in the published draw, and moved from another open round.
 create or replace function make_pick(p_round_id uuid, p_player_id uuid) returns void
 language plpgsql security definer set search_path = public as $$
 declare
@@ -102,6 +104,11 @@ begin
      or v_first > v_round.idx then
     raise exception 'Ce joueur est exempté de ce tour : il ne joue pas de match';
   end if;
+
+  -- Queued in another round still open: he moves here.
+  delete from picks p using rounds r
+  where p.entry_id = v_entry_id and p.player_id = p_player_id and p.round_id <> p_round_id
+    and r.id = p.round_id and r.locks_at > now();
 
   if exists (select 1 from picks where entry_id = v_entry_id
              and player_id = p_player_id and round_id <> p_round_id) then
