@@ -128,6 +128,7 @@ export function dbError(message: string): string {
 }
 const DB_ERRORS = {
   "Ce joueur a déjà été choisi": "errors.playerUsed",
+  "Ce joueur a déclaré forfait": "errors.playerWithdrawn",
   "Ce joueur est déjà éliminé": "errors.playerOut",
   "Ce joueur est exempté de ce tour": "errors.playerBye",
   "Ce joueur ne fait pas partie de ce tournoi": "errors.playerNotInTournament",

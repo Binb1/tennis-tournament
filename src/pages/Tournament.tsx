@@ -265,6 +265,12 @@ function derive(data: Data, uid: string | undefined, now: number) {
     const idx = idxOf.get(r.round_id)
     if (r.result === "lost" && idx && idx < (lostRound.get(r.player_id) ?? Infinity)) lostRound.set(r.player_id, idx)
   }
+  // Withdrawn: once the draw is out, a player in no match of it (replaced by a lucky loser) is out before round 1,
+  // lost at 0, as in entry_status (migration 0018).
+  if (data.matches.length > 0) {
+    const inDraw = new Set(data.matches.flatMap((m) => [m.player1_id, m.player2_id]))
+    for (const p of data.players) if (!inDraw.has(p.id) && !lostRound.has(p.id)) lostRound.set(p.id, 0)
+  }
 
   const picksByEntry = new Map<string, Map<string, string>>()
   for (const p of data.picks) {
@@ -636,12 +642,16 @@ function RunList({
         const isOpen = state === "open"
         const on = isOpen && round.id === selected
         const out = isOpen && !!pid && d.lostRound.has(pid)
+        // The earlier round comes first: when two picks meet before both rounds are won, the later one is flagged.
+        const clash = isOpen && pid ? rows.find((o) => o.pid && o.pid !== pid && o.round.idx < round.idx && (d.meetRound(pid, o.pid) ?? Infinity) <= o.round.idx) : undefined
         const status =
           state === "pending"
             ? t("tournament.runInPlay")
-            : isOpen
-              ? t("tournament.runLocksIn", { left: formatLeft(new Date(round.locks_at).getTime() - now, false) })
-              : t(CHIP_LABEL[state])
+            : clash
+              ? t("tournament.clashAt", { player: shortName(d.playerById.get(clash.pid!)?.name ?? ""), round: roundName(clash.round.name) })
+              : isOpen
+                ? t("tournament.runLocksIn", { left: formatLeft(new Date(round.locks_at).getTime() - now, false) })
+                : t(CHIP_LABEL[state])
         const body = (
           <>
             <Icon aria-hidden="true" className={cn("size-4 shrink-0", state === "won" && "text-ball", state === "lost" && "opacity-60", isOpen && "opacity-70")} />
@@ -657,7 +667,9 @@ function RunList({
                 </span>
               )}
             </span>
-            <span className="shrink-0 text-right text-[11px] font-bold tracking-[0.08em] uppercase [font-stretch:85%]">{status}</span>
+            <span className={cn("shrink-0 text-right text-[11px] font-bold tracking-[0.08em] uppercase [font-stretch:85%]", clash && !on && "text-ball")}>
+              {status}
+            </span>
             {round.id === resultRound?.id && pid && <ResultMoment id={`${entryId}:${round.id}`} result={d.pickResult(pid, round)} />}
           </>
         )
@@ -865,6 +877,7 @@ function PlayerPicker({
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [q, setQ] = useState("")
+  const [showOut, setShowOut] = useState(false)
   const pickedId = d.myPicks.get(round.id)
   const roundLabel = (idx: number) => {
     const name = d.roundByIdx.get(idx)?.name
@@ -876,23 +889,30 @@ function PlayerPicker({
     const pid = r.id === round.id ? undefined : d.myPicks.get(r.id)
     return pid ? [{ r, pid }] : []
   })
-  // Why a player can't be picked, or null if he can.
-  const reason = (p: Player) => {
+  // `why`: he can't be picked. `note`: he can, but it changes another open round. The round being picked comes first:
+  // only locked rounds block; a plan in another open round moves here (make_pick, migration 0018) or is flagged.
+  const reason = (p: Player): { why?: string; note?: string } => {
     const lost = d.lostRound.get(p.id)
-    if (lost) return t("tournament.outAt", { round: roundLabel(lost) })
-    if (d.exempt(p.id, round)) return t("tournament.byeAt", { round: roundName(round.name) })
+    if (lost === 0) return { why: t("tournament.withdrawn") }
+    if (lost) return { why: t("tournament.outAt", { round: roundLabel(lost) }) }
+    if (d.exempt(p.id, round)) return { why: t("tournament.byeAt", { round: roundName(round.name) }) }
     const used = others.find((o) => o.pid === p.id)
-    if (used) return t(d.locked(used.r) ? "tournament.usedAt" : "tournament.plannedAt", { round: roundName(used.r.name) })
+    if (used && d.locked(used.r)) return { why: t("tournament.usedAt", { round: roundName(used.r.name) }) }
     // Both must win up to the round they meet in: one of the two picks is a sure loss.
-    const clash = others.find((o) => (d.meetRound(p.id, o.pid) ?? Infinity) <= Math.min(round.idx, o.r.idx))
-    if (clash) return t("tournament.clashAt", { player: shortName(d.playerById.get(clash.pid)?.name ?? ""), round: roundName(clash.r.name) })
-    return null
+    const clash = others.find((o) => o.pid !== p.id && (d.meetRound(p.id, o.pid) ?? Infinity) <= Math.min(round.idx, o.r.idx))
+    const clashText = clash && t("tournament.clashAt", { player: shortName(d.playerById.get(clash.pid)?.name ?? ""), round: roundName(clash.r.name) })
+    if (clash && d.locked(clash.r)) return { why: clashText }
+    if (used) return { note: t("tournament.movesHere", { round: roundName(used.r.name) }) }
+    return { note: clashText }
   }
   const needle = q.trim().toLowerCase()
-  const list = data.players
+  const all = data.players
     .filter((p) => !needle || p.name.toLowerCase().includes(needle))
-    .map((p) => ({ p, why: reason(p) }))
+    .map((p) => ({ p, ...reason(p) }))
     .sort((a, b) => Number(!!a.why) - Number(!!b.why) || (a.p.seed ?? 999) - (b.p.seed ?? 999) || a.p.name.localeCompare(b.p.name))
+  // The ones who can't be picked (mostly already out) stay folded, unless searched for or my current pick.
+  const hidden = needle ? 0 : all.filter((x) => x.why && x.p.id !== pickedId).length
+  const list = showOut || needle ? all : all.filter((x) => !x.why || x.p.id === pickedId)
 
   async function save(fn: "make_pick" | "clear_pick", key: string, args: Record<string, string>) {
     setSaving(key)
@@ -929,7 +949,7 @@ function PlayerPicker({
       </div>
       <SearchInput value={q} onChange={setQ} placeholder={t("tournament.searchPlayer")} />
       <ul className="border-2 border-chalk/90">
-        {list.map(({ p, why }) => {
+        {list.map(({ p, why, note }) => {
           const selected = p.id === pickedId
           return (
             <li key={p.id} className="border-t-2 border-chalk/50 first:border-t-0">
@@ -954,6 +974,7 @@ function PlayerPicker({
                   {!why && <MatchLine m={d.matchOf.get(`${round.id}:${p.id}`)} pid={p.id} playerById={d.playerById} />}
                 </span>
                 {why && <span className="shrink-0 text-xs">{why}</span>}
+                {note && !selected && <span className="shrink-0 text-right text-xs font-medium text-ball">{note}</span>}
                 {selected && (
                   // Inverted tag on the chalk row: surface colour fill, chalk text.
                   <span className="shrink-0 rounded-[2px] bg-clay px-2 py-0.5 text-[11px] font-bold tracking-[0.12em] whitespace-nowrap text-chalk uppercase [font-stretch:85%]">
@@ -967,6 +988,15 @@ function PlayerPicker({
         })}
         {list.length === 0 && <li className="px-3 py-4 text-sm text-chalk/80">{t("tournament.noPlayer")}</li>}
       </ul>
+      {hidden > 0 && (
+        <button
+          onClick={() => setShowOut(!showOut)}
+          aria-expanded={showOut}
+          className="min-h-11 text-xs font-medium text-chalk/90 underline underline-offset-2 hover:text-chalk"
+        >
+          {t(showOut ? "tournament.hideUnavailable" : "tournament.showUnavailable", { count: hidden })}
+        </button>
+      )}
     </section>
   )
 }

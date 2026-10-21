@@ -5,6 +5,7 @@ export default ns(
   {
     playerUsed: "Ce joueur a déjà été choisi",
     playerOut: "Ce joueur est déjà éliminé",
+    playerWithdrawn: "Ce joueur a déclaré forfait : il n'est pas dans le tableau",
     playerBye: "Ce joueur est exempté de ce tour : il ne joue pas de match",
     playerNotInTournament: "Ce joueur ne fait pas partie de ce tournoi",
     roundLocked: "Ce tour est verrouillé",
@@ -24,6 +25,7 @@ export default ns(
   {
     playerUsed: "You've already picked this player",
     playerOut: "This player is already out",
+    playerWithdrawn: "This player withdrew: he is not in the draw",
     playerBye: "This player has a bye in this round: he has no match to win",
     playerNotInTournament: "This player isn't in this tournament",
     roundLocked: "This round is locked",
@@ -43,6 +45,7 @@ export default ns(
   {
     playerUsed: "Ya has elegido a este jugador",
     playerOut: "Este jugador ya está eliminado",
+    playerWithdrawn: "Este jugador se dio de baja: no está en el cuadro",
     playerBye: "Este jugador está exento en esta ronda (bye): no juega ningún partido",
     playerNotInTournament: "Este jugador no participa en este torneo",
     roundLocked: "Esta ronda está cerrada",
