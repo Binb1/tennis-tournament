@@ -120,6 +120,20 @@ export function roundName(name: string): string {
   return k ? t(k) : name
 }
 
+/** A round's name in a few characters ("T2", "1/4", "F"), for tight spots. */
+export function roundShort(name: string): string {
+  const n = /^(\d+)\s*(?:er|e|ème)\s+tour$/i.exec(name.trim())?.[1]
+  if (n) return t("round.shortNth", { n })
+  const map: Record<string, MsgKey> = {
+    "8es de finale": "round.shortR16",
+    quarts: "round.shortQf",
+    demies: "round.shortSf",
+    finale: "round.shortFinal",
+  }
+  const k = map[name.trim().toLowerCase()]
+  return k ? t(k) : name
+}
+
 /** Database errors (raised in French by the RPCs) in the current language; unknown ones as they come. */
 export function dbError(message: string): string {
   if (lang === "fr") return message

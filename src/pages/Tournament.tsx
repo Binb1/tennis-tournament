@@ -9,7 +9,7 @@ import { Flag, MatchLine, PlayerName } from "@/components/court/PlayerLabel"
 import { SocialIcons } from "@/components/court/Socials"
 import { BallBoyRun, PixelNetFault, PixelWin, ShotClock } from "@/components/pixel/Animations"
 import { useAuth } from "@/lib/auth"
-import { dbError, locale, roundName, t, tr, type MsgKey } from "@/lib/i18n"
+import { dbError, locale, roundName, roundShort, t, tr, type MsgKey } from "@/lib/i18n"
 import { Once } from "@/lib/seen"
 import { bonusPoints, roundPoints } from "@/lib/scoring"
 import { useThemeOverride } from "@/lib/theme"
@@ -203,6 +203,7 @@ function TournamentView({ id }: { id: string }) {
   return (
     <AppShell>
       <BackLink />
+      <RoundRecap data={data} d={d} />
       <PageTitle eyebrow={`${statusLabel(tn.status, data.players.length > 0)} · ${tn.tour}`}>
         <Flag code={tn.country} className="mr-3 align-[0.06em]" />
         {tn.name}
@@ -699,6 +700,42 @@ function RunList({
 }
 
 /**
+ * My run in one small line, above the title on every tab: each round won, lost, in play or missed, then the ones still
+ * to come (dashed while unpicked). Rounds after my elimination fade out. Shown once a round has locked.
+ */
+function RoundRecap({ data, d }: { data: Data; d: Derived }) {
+  if (!d.myEntry || !data.rounds.some(d.locked)) return null
+  const steps = new Map(d.trail(d.myEntry.id).filter((s) => d.locked(s.round)).map((s) => [s.round.id, s]))
+  const out = d.myStatus?.eliminated_round != null
+  return (
+    <ol aria-label={t("tournament.myPath")} className="mb-2 flex flex-wrap gap-1">
+      {data.rounds.map((r) => {
+        const step = steps.get(r.id)
+        const state = step?.state ?? (out ? null : "open")
+        const pid = step?.player?.id ?? (out ? undefined : d.myPicks.get(r.id))
+        const Icon = state && state !== "open" ? RUN_ICON[state] : null
+        const label = state ? t(CHIP_LABEL[state]) : "–"
+        return (
+          <li
+            key={r.id}
+            title={`${roundName(r.name)} · ${pid ? `${d.playerById.get(pid)?.name ?? ""} · ` : ""}${label}`}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-[2px] border-2 px-1.5 py-0.5 text-[11px] font-bold tracking-[0.06em] whitespace-nowrap uppercase [font-stretch:85%]",
+              state ? CHIP_STYLE[state] : "border-chalk/20 text-chalk/40",
+              state === "open" && !pid && "border-dashed",
+            )}
+          >
+            {roundShort(r.name)}
+            {Icon && <Icon aria-hidden="true" className="size-3" />}
+            <span className="sr-only">{label}</span>
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+/**
  * My pick's result, played once per device, small at the end of the pick line: the player jumps for a win, the ball
  * clips the net for a loss.
  */
@@ -889,21 +926,31 @@ function PlayerPicker({
     const pid = r.id === round.id ? undefined : d.myPicks.get(r.id)
     return pid ? [{ r, pid }] : []
   })
-  // `why`: he can't be picked. `note`: he can, but it changes another open round. The round being picked comes first:
-  // only locked rounds block; a plan in another open round moves here (make_pick, migration 0018) or is flagged.
-  const reason = (p: Player): { why?: string; note?: string } => {
+  // Both must win up to the round they meet in: one of the two picks is a sure loss.
+  const clashes = (p: Player) => others.filter((o) => o.pid !== p.id && (d.meetRound(p.id, o.pid) ?? Infinity) <= Math.min(round.idx, o.r.idx))
+  // Later open rounds whose pick can't survive this one: picking here removes them.
+  const dropped = (p: Player) => clashes(p).filter((o) => o.r.idx > round.idx && !d.locked(o.r))
+  // `why`: he can't be picked. `notes`: he can, but it changes other open rounds. The round being picked comes first:
+  // only locked rounds block; a plan in another open round moves here (make_pick, migration 0018), a later pick he
+  // meets is removed, an earlier one is flagged.
+  const reason = (p: Player): { why?: string; notes: string[] } => {
     const lost = d.lostRound.get(p.id)
-    if (lost === 0) return { why: t("tournament.withdrawn") }
-    if (lost) return { why: t("tournament.outAt", { round: roundLabel(lost) }) }
-    if (d.exempt(p.id, round)) return { why: t("tournament.byeAt", { round: roundName(round.name) }) }
+    if (lost === 0) return { why: t("tournament.withdrawn"), notes: [] }
+    if (lost) return { why: t("tournament.outAt", { round: roundLabel(lost) }), notes: [] }
+    if (d.exempt(p.id, round)) return { why: t("tournament.byeAt", { round: roundName(round.name) }), notes: [] }
     const used = others.find((o) => o.pid === p.id)
-    if (used && d.locked(used.r)) return { why: t("tournament.usedAt", { round: roundName(used.r.name) }) }
-    // Both must win up to the round they meet in: one of the two picks is a sure loss.
-    const clash = others.find((o) => o.pid !== p.id && (d.meetRound(p.id, o.pid) ?? Infinity) <= Math.min(round.idx, o.r.idx))
-    const clashText = clash && t("tournament.clashAt", { player: shortName(d.playerById.get(clash.pid)?.name ?? ""), round: roundName(clash.r.name) })
-    if (clash && d.locked(clash.r)) return { why: clashText }
-    if (used) return { note: t("tournament.movesHere", { round: roundName(used.r.name) }) }
-    return { note: clashText }
+    if (used && d.locked(used.r)) return { why: t("tournament.usedAt", { round: roundName(used.r.name) }), notes: [] }
+    const named = (key: "tournament.clashAt" | "tournament.removesPick", o: { r: Round; pid: string }) =>
+      t(key, { player: shortName(d.playerById.get(o.pid)?.name ?? ""), round: roundName(o.r.name) })
+    const all = clashes(p)
+    const blocking = all.find((o) => d.locked(o.r))
+    if (blocking) return { why: named("tournament.clashAt", blocking), notes: [] }
+    return {
+      notes: [
+        ...(used ? [t("tournament.movesHere", { round: roundName(used.r.name) })] : []),
+        ...all.map((o) => named(o.r.idx > round.idx ? "tournament.removesPick" : "tournament.clashAt", o)),
+      ],
+    }
   }
   const needle = q.trim().toLowerCase()
   const all = data.players
@@ -925,7 +972,18 @@ function PlayerPicker({
   }
   async function pick(p: Player) {
     const hadPick = !!pickedId
-    if (await save("make_pick", p.id, { p_round_id: round.id, p_player_id: p.id })) onPicked?.(hadPick)
+    const drop = dropped(p)
+    setSaving(p.id)
+    setError(null)
+    let { error } = await supabase.rpc("make_pick", { p_round_id: round.id, p_player_id: p.id })
+    if (!error) {
+      const res = await Promise.all(drop.map((o) => supabase.rpc("clear_pick", { p_round_id: o.r.id })))
+      error = res.find((r) => r.error)?.error ?? null
+    }
+    if (error) setError(dbError(error.message))
+    await onChanged()
+    setSaving(null)
+    if (!error) onPicked?.(hadPick)
   }
 
   return (
@@ -949,7 +1007,7 @@ function PlayerPicker({
       </div>
       <SearchInput value={q} onChange={setQ} placeholder={t("tournament.searchPlayer")} />
       <ul className="border-2 border-chalk/90">
-        {list.map(({ p, why, note }) => {
+        {list.map(({ p, why, notes }) => {
           const selected = p.id === pickedId
           return (
             <li key={p.id} className="border-t-2 border-chalk/50 first:border-t-0">
@@ -974,7 +1032,15 @@ function PlayerPicker({
                   {!why && <MatchLine m={d.matchOf.get(`${round.id}:${p.id}`)} pid={p.id} playerById={d.playerById} />}
                 </span>
                 {why && <span className="shrink-0 text-xs">{why}</span>}
-                {note && !selected && <span className="shrink-0 text-right text-xs font-medium text-ball">{note}</span>}
+                {notes.length > 0 && !selected && (
+                  <span className="shrink-0 text-right text-xs font-medium text-ball">
+                    {notes.map((n) => (
+                      <span key={n} className="block">
+                        {n}
+                      </span>
+                    ))}
+                  </span>
+                )}
                 {selected && (
                   // Inverted tag on the chalk row: surface colour fill, chalk text.
                   <span className="shrink-0 rounded-[2px] bg-clay px-2 py-0.5 text-[11px] font-bold tracking-[0.12em] whitespace-nowrap text-chalk uppercase [font-stretch:85%]">
