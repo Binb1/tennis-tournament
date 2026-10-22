@@ -503,9 +503,10 @@ function MyPick({ data, d, onChanged, onPlan }: { data: Data; d: Derived; onChan
   })
 
   // Filling the path from here: after a first pick, go on to the next open round still without one.
-  function picked(hadPick: boolean) {
+  // `freed`: later rounds whose pick this one just removed (d is from before the reload).
+  function picked(hadPick: boolean, freed: string[]) {
     if (!round || hadPick) return
-    const next = openRounds.find((r) => r.idx > round.idx && !d.myPicks.has(r.id))
+    const next = openRounds.find((r) => r.idx > round.idx && (!d.myPicks.has(r.id) || freed.includes(r.id)))
     if (!next) return
     setRoundId(next.id)
     gridRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
@@ -714,11 +715,13 @@ function RoundRecap({ data, d }: { data: Data; d: Derived }) {
         const state = step?.state ?? (out ? null : "open")
         const pid = step?.player?.id ?? (out ? undefined : d.myPicks.get(r.id))
         const Icon = state && state !== "open" ? RUN_ICON[state] : null
-        const label = state ? t(CHIP_LABEL[state]) : "–"
+        // A planned round says who; the others say how it went (or "à choisir").
+        const name = pid ? d.playerById.get(pid)?.name : undefined
+        const label = state === "open" && name ? name : [name, state ? t(CHIP_LABEL[state]) : "–"].filter(Boolean).join(" · ")
         return (
           <li
             key={r.id}
-            title={`${roundName(r.name)} · ${pid ? `${d.playerById.get(pid)?.name ?? ""} · ` : ""}${label}`}
+            title={`${roundName(r.name)} · ${label}`}
             className={cn(
               "inline-flex items-center gap-1 rounded-[2px] border-2 px-1.5 py-0.5 text-[11px] font-bold tracking-[0.06em] whitespace-nowrap uppercase [font-stretch:85%]",
               state ? CHIP_STYLE[state] : "border-chalk/20 text-chalk/40",
@@ -909,7 +912,7 @@ function PlayerPicker({
   round: Round
   onChanged: () => Promise<void>
   /** After a successful pick; `hadPick`: the round had a pick before (a change, not a first pick). */
-  onPicked?: (hadPick: boolean) => void
+  onPicked?: (hadPick: boolean, freed: string[]) => void
 }) {
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -972,7 +975,8 @@ function PlayerPicker({
   }
   async function pick(p: Player) {
     const hadPick = !!pickedId
-    const drop = dropped(p)
+    // Re-tapping my current pick changes nothing else (its notes aren't shown on the selected row).
+    const drop = p.id === pickedId ? [] : dropped(p)
     setSaving(p.id)
     setError(null)
     let { error } = await supabase.rpc("make_pick", { p_round_id: round.id, p_player_id: p.id })
@@ -983,7 +987,7 @@ function PlayerPicker({
     if (error) setError(dbError(error.message))
     await onChanged()
     setSaving(null)
-    if (!error) onPicked?.(hadPick)
+    if (!error) onPicked?.(hadPick, drop.map((o) => o.r.id))
   }
 
   return (
