@@ -43,8 +43,17 @@ export const roundsOfDraw = (drawSize: number) => Math.max(1, Math.round(Math.lo
 export const maxPoints = (c: Category, rounds: number) =>
   Array.from({ length: rounds }, (_, i) => roundWeight(i)).reduce((a, b) => a + b, 0) * multiplier(c) + 2 * bonusPoints(c)
 
-/** Default category for a new tournament: from its style (Grand Chelem / Masters theme), else 250. */
-export function suggestCategory(theme: string | null | undefined): Category {
+/**
+ * The ATP 500s, by city or event name: the 16 of the 2026 calendar (atptour.com/en/tournaments). Check it each season,
+ * the list moves (Dallas joined in 2026).
+ */
+const ATP_500 =
+  /dallas|rotterdam|abn amro|doha|qatar|\brio\b|dubai|acapulco|abierto mexicano|barcelona|munich|bmw open|hamburg|queen|hsbc championships|halle|terra wortmann|washington|dc open|beijing|china open|tokyo|japan open|vienna|wien|erste|basel|swiss indoors/i
+
+/** Default category for a new tournament: from its style (Grand Chelem / Masters theme), then its name (500), else 250. */
+export function suggestCategory(theme: string | null | undefined, name: string): Category {
   const group = THEMES.find((t) => t.id === theme)?.group
-  return group === "slam" ? "grand_slam" : group === "masters" ? "masters1000" : "atp250"
+  if (group === "slam") return "grand_slam"
+  if (group === "masters") return "masters1000"
+  return ATP_500.test(name) ? "atp500" : "atp250"
 }
