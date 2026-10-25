@@ -98,9 +98,9 @@ export default function AdminHome() {
   // Style follows the name until the admin picks one.
   const [theme, setThemeChoice] = useState<string | null>(null)
   const style = theme ?? suggestTheme(name) ?? ""
-  // Category follows the style until the admin picks one.
+  // Category follows the style and the name until the admin picks one.
   const [categoryChoice, setCategory] = useState<Category | null>(null)
-  const category = categoryChoice ?? suggestCategory(style)
+  const category = categoryChoice ?? suggestCategory(style, name)
   // Country (flag) follows the name until the admin types one.
   const [countryChoice, setCountry] = useState<string | null>(null)
   const country = countryChoice ?? suggestCountry(name) ?? ""
