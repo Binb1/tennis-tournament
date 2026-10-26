@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import type { Session } from "@supabase/supabase-js"
 import { Navigate } from "react-router-dom"
 
+import { identify, resetIdentity } from "@/lib/analytics"
 import { t } from "@/lib/i18n"
 import { supabase, type Profile } from "@/lib/supabase"
 import { AppShell, ErrorBox, LineButton, Loading } from "@/components/court/AppShell"
@@ -29,12 +30,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!s) {
       loadedFor.current = null
       setProfile(null)
+      resetIdentity()
       return
     }
     const { data, error } = await supabase.from("profiles").select("*").eq("id", s.user.id).maybeSingle()
     if (error) setError(error.message)
     else loadedFor.current = s.user.id
-    setProfile((data as Profile | null) ?? null)
+    const p = (data as Profile | null) ?? null
+    if (p) identify(p)
+    setProfile(p)
   }, [])
 
   useEffect(() => {
