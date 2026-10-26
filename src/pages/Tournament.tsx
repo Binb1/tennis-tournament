@@ -8,6 +8,7 @@ import { StakeCard } from "@/components/court/PointsStake"
 import { Flag, MatchLine, PlayerName } from "@/components/court/PlayerLabel"
 import { SocialIcons } from "@/components/court/Socials"
 import { BallBoyRun, PixelNetFault, PixelWin, ShotClock } from "@/components/pixel/Animations"
+import { track } from "@/lib/analytics"
 import { useAuth } from "@/lib/auth"
 import { dbError, locale, roundName, roundShort, t, tr, type MsgKey } from "@/lib/i18n"
 import { Once } from "@/lib/seen"
@@ -171,7 +172,10 @@ function TournamentView({ id }: { id: string }) {
     setJoinError(null)
     const { error } = await supabase.rpc("join_tournament", { p_tournament_id: id })
     if (error) setJoinError(dbError(error.message))
-    else await reload()
+    else {
+      if (data) track("tournament_joined", { tournament_id: data.t.id, tournament_name: data.t.name, category: data.t.category })
+      await reload()
+    }
     setJoining(false)
   }
 
@@ -987,7 +991,10 @@ function PlayerPicker({
     if (error) setError(dbError(error.message))
     await onChanged()
     setSaving(null)
-    if (!error) onPicked?.(hadPick, drop.map((o) => o.r.id))
+    if (!error) {
+      track("pick_made", { tournament_id: data.t.id, round_name: round.name, is_change: hadPick })
+      onPicked?.(hadPick, drop.map((o) => o.r.id))
+    }
   }
 
   return (

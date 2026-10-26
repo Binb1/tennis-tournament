@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { ArrowRight } from "lucide-react"
 
 import { AppShell, ChalkButton, ErrorBox, Field, PageTitle } from "@/components/court/AppShell"
+import { track } from "@/lib/analytics"
 import { useAuth } from "@/lib/auth"
 import { t, getLang } from "@/lib/i18n"
 import { supabase } from "@/lib/supabase"
@@ -55,6 +56,7 @@ export default function Welcome() {
       setError(e2.message)
       return
     }
+    track("signed_up", {})
     await refreshProfile()
     navigate("/tournois", { replace: true })
   }
