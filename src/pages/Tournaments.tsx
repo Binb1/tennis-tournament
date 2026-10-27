@@ -16,7 +16,7 @@ import {
   fetchLastPicks,
   fetchWinners,
   formatDate,
-  groupTournaments,
+  groupByMonth,
   hasDraw,
   statusLabel,
   supabase,
@@ -90,9 +90,16 @@ export default function Tournaments() {
       {rows && <ToDo rows={rows} mine={mine} openRound={openRound} lastPicks={lastPicks} now={now} />}
       {rows && rows.length === 0 && <p className="py-8 text-center text-chalk/85">{t("tournaments.empty")}</p>}
       {rows &&
-        groupTournaments(rows).map(({ key, title, list }) => {
-          const cards = (
-            <div className="space-y-3">
+        // One section per month, folded except the current one: what's urgent is in "This week" / "To do" above.
+        groupByMonth(rows).map(({ key, title, current, list }) => (
+          <details key={key} open={current} className="group mb-4">
+            <summary className="mb-3 flex min-h-11 cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
+              <h2 className="micro-label">
+                {title} · {list.length}
+              </h2>
+              <ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden="true" />
+            </summary>
+            <div className="mb-4 space-y-3">
               {list.map((x) => (
                 <TournamentCard
                   key={x.id}
@@ -105,28 +112,8 @@ export default function Tournaments() {
                 />
               ))}
             </div>
-          )
-          // Finished tournaments: folded by default, the page is about what's on.
-          if (key === "finished") {
-            return (
-              <details key={key} className="group mb-8">
-                <summary className="mb-3 flex min-h-11 cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
-                  <h2 className="micro-label">
-                    {title} · {list.length}
-                  </h2>
-                  <ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden="true" />
-                </summary>
-                {cards}
-              </details>
-            )
-          }
-          return (
-            <section key={key} className="mb-8">
-              <h2 className="micro-label mb-3">{title}</h2>
-              {cards}
-            </section>
-          )
-        })}
+          </details>
+        ))}
     </AppShell>
   )
 }
