@@ -229,7 +229,7 @@ export type WithDraw = Tournament & { players: { count: number }[] }
 export const hasDraw = (t: WithDraw) => (t.players[0]?.count ?? 0) > 0
 
 /**
- * Tournament list sections, shared by the players' list and the admin. Registration only counts as open once the
+ * Admin tournament list sections, by status. Registration only counts as open once the
  * draw is imported. Rows come latest first (starts_at desc); upcoming sections flip to soonest first.
  * `drafts`: admin only, drafts after the upcoming ones.
  */
@@ -249,6 +249,25 @@ export function groupTournaments<T extends WithDraw>(rows: T[], drafts = false):
       return { key: g.key, title: g.title, list: g.latestFirst ? list : list.reverse() }
     })
     .filter((g) => g.list.length > 0)
+}
+
+/**
+ * The players' list by month of start, the season in calendar order (soonest first within a month). `current`: the
+ * month we're in. No start date goes last.
+ */
+export function groupByMonth<T extends Tournament>(rows: T[], now = new Date()): { key: string; title: string; current: boolean; list: T[] }[] {
+  const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+  const sorted = [...rows].sort((a, b) => (a.starts_at ?? "9999").localeCompare(b.starts_at ?? "9999"))
+  const groups = new Map<string, T[]>()
+  for (const x of sorted) {
+    const key = x.starts_at ? monthKey(new Date(x.starts_at)) : "tbd"
+    groups.set(key, [...(groups.get(key) ?? []), x])
+  }
+  return [...groups].map(([key, list]) => {
+    const month = new Date(list[0].starts_at ?? 0).toLocaleString(locale(), { month: "long", year: "numeric" })
+    const title = key === "tbd" ? t("common.dateTbd") : month.charAt(0).toUpperCase() + month.slice(1)
+    return { key, title, current: key === monthKey(now), list }
+  })
 }
 
 /** Registration without an imported draw is shown as "upcoming", not "open". */
