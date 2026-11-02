@@ -16,9 +16,9 @@ export default ns(
     pick4: "Un joueur exempté (bye) ne peut pas être choisi pour le tour qu'il ne joue pas : il n'a pas de match à gagner.",
     lockTitle: "Verrouillage",
     lock1:
-      "Un tour se verrouille dès que son premier match commence, pour tout le monde. Exemple : le 1er tour débute lundi à 11 h, tous les choix du 1er tour sont figés lundi à 11 h, même pour un joueur qui ne joue que mardi.",
+      "Un tour se verrouille 10 minutes avant son premier match, pour tout le monde. Exemple : le 1er tour débute lundi à 11 h, tous les choix du 1er tour sont figés lundi à 10 h 50, même pour un joueur qui ne joue que mardi.",
     lock2:
-      "Le 1er tour se verrouille donc au tout premier match du tournoi. À ce moment-là, le pronostic du vainqueur et les inscriptions ferment aussi (sauf si l'admin ouvre les inscriptions en cours de tournoi).",
+      "Le 1er tour se verrouille donc 10 minutes avant le tout premier match du tournoi. À ce moment-là, le pronostic du vainqueur et les inscriptions ferment aussi (sauf si l'admin ouvre les inscriptions en cours de tournoi).",
     lock3: "L'heure exacte de chaque verrouillage est affichée sur la page du tournoi, avec un compte à rebours.",
     lock4: "Après le verrouillage, les choix sont figés et ceux des autres deviennent visibles.",
     outTitle: "Élimination",
@@ -60,9 +60,9 @@ export default ns(
     pick4: "A player with a bye can't be picked for the round he skips: he has no match to win.",
     lockTitle: "Lock",
     lock1:
-      "A round locks as soon as its first match starts, for everyone. Example: round 1 starts Monday at 11:00, so every round 1 pick is frozen Monday at 11:00, even for a player who only plays on Tuesday.",
+      "A round locks 10 minutes before its first match, for everyone. Example: round 1 starts Monday at 11:00, so every round 1 pick is frozen Monday at 10:50, even for a player who only plays on Tuesday.",
     lock2:
-      "So round 1 locks at the very first match of the tournament. At that moment, champion predictions and sign-ups close too (unless the admin opens sign-ups mid-tournament).",
+      "So round 1 locks 10 minutes before the very first match of the tournament. At that moment, champion predictions and sign-ups close too (unless the admin opens sign-ups mid-tournament).",
     lock3: "The exact time of each lock is shown on the tournament page, with a countdown.",
     lock4: "Once a round locks, picks are frozen and everyone else's become visible.",
     outTitle: "Elimination",
@@ -104,9 +104,9 @@ export default ns(
     pick4: "Un jugador exento (bye) no se puede elegir para la ronda que no juega: no tiene ningún partido que ganar.",
     lockTitle: "Cierre",
     lock1:
-      "Una ronda se cierra en cuanto empieza su primer partido, para todos. Ejemplo: la 1.ª ronda empieza el lunes a las 11:00, así que todas las elecciones de la 1.ª ronda quedan fijadas el lunes a las 11:00, aunque el jugador no juegue hasta el martes.",
+      "Una ronda se cierra 10 minutos antes de su primer partido, para todos. Ejemplo: la 1.ª ronda empieza el lunes a las 11:00, así que todas las elecciones de la 1.ª ronda quedan fijadas el lunes a las 10:50, aunque el jugador no juegue hasta el martes.",
     lock2:
-      "Por tanto, la 1.ª ronda se cierra con el primerísimo partido del torneo. En ese momento también se cierran el pronóstico del campeón y las inscripciones (salvo que el admin abra las inscripciones con el torneo en marcha).",
+      "Por tanto, la 1.ª ronda se cierra 10 minutos antes del primerísimo partido del torneo. En ese momento también se cierran el pronóstico del campeón y las inscripciones (salvo que el admin abra las inscripciones con el torneo en marcha).",
     lock3: "La hora exacta de cada cierre aparece en la página del torneo, con una cuenta atrás.",
     lock4: "Tras el cierre, las elecciones quedan fijadas y las de los demás se hacen visibles.",
     outTitle: "Eliminación",

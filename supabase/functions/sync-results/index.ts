@@ -89,7 +89,7 @@ async function upsertMatches(db: Db, t: Tournament, draw: unknown): Promise<Slot
   if (rows.length) {
     const { error } = await db.from("matches").upsert(rows, { onConflict: "tournament_id,external_id" })
     if (error) throw new Error(error.message)
-    // Open rounds lock at their first scheduled match (migration 0011).
+    // Open rounds lock 10 min before their first scheduled match (migrations 0011, 0019).
     const { error: lockErr } = await db.rpc("align_round_locks", { p_tournament_id: t.id })
     if (lockErr) throw new Error(lockErr.message)
   }
