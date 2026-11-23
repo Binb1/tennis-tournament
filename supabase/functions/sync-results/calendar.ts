@@ -7,7 +7,9 @@
 //      remain on either side, only the ones whose names share a word (city, sponsor) are kept;
 //   3. still not one-to-one, or the id is already someone else's: no id, the admin sets it;
 //   4. one-to-one but the names share no word ("unsure"): proposed, never written automatically. Only "matched"
-//      ids are written.
+//      ids are written. A Grand Slam needs no shared word (API: "French Open - Paris" for Roland-Garros): there is
+//      never another Slam in the same country within the window.
+// API names are "<name> - <city>" ("BNP Paribas Open - Indian Wells"), dated to the start of the week.
 
 export type Level = "grand_slam" | "masters1000" | "tour"
 
@@ -84,7 +86,7 @@ const STOP = new Set([
 /** Distinctive words of a name: lower case, no accents, no stop words or years. */
 export function words(name: string): Set<string> {
   return new Set(
-    name.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().split(/[^a-z0-9]+/)
+    name.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/\./g, "").split(/[^a-z0-9]+/)
       .filter((w) => w.length > 1 && !STOP.has(w) && !/^\d+$/.test(w)),
   )
 }
@@ -120,6 +122,7 @@ export function matchCalendar(ours: Ours[], events: ApiEvent[], used: Map<string
     if (!unique) return { ...base, external_id: null, status: "ambiguous" }
     const holder = used.get(pick[0].id)
     if (holder && holder !== t.id) return { ...base, external_id: null, status: "taken" }
-    return { ...base, external_id: pick[0].id, status: share(t.name, pick[0].name) ? "matched" : "unsure" }
+    const sure = share(t.name, pick[0].name) || levelOf(t.category) === "grand_slam"
+    return { ...base, external_id: pick[0].id, status: sure ? "matched" : "unsure" }
   })
 }
