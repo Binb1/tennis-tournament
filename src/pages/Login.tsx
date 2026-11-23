@@ -6,6 +6,7 @@ import { AppShell, Box, ChalkButton, ErrorBox, Field, PageTitle, PasswordField }
 import { useAuth } from "@/lib/auth"
 import { authError } from "@/lib/authErrors"
 import { t } from "@/lib/i18n"
+import { homePath } from "@/lib/leagues"
 import { supabase } from "@/lib/supabase"
 
 type Mode = "signin" | "signup"
@@ -21,7 +22,7 @@ export default function Login() {
   /** Message shown instead of the form (confirmation mail, reset mail). */
   const [notice, setNotice] = useState<{ title: string; body: string } | null>(null)
 
-  if (!loading && session) return <Navigate to="/tournois" replace />
+  if (!loading && session) return <Navigate to={homePath()} replace />
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -36,7 +37,7 @@ export default function Login() {
       const { error } = await supabase.auth.signInWithPassword(creds)
       setBusy(false)
       if (error) return setError(authError(error))
-      navigate("/tournois", { replace: true })
+      navigate(homePath(), { replace: true })
     } else {
       const { data, error } = await supabase.auth.signUp({
         ...creds,
@@ -48,7 +49,7 @@ export default function Login() {
         setNotice({ title: t("login.almostDoneTitle"), body: t("login.almostDoneBody") })
         return
       }
-      navigate("/tournois", { replace: true })
+      navigate(homePath(), { replace: true })
     }
   }
 

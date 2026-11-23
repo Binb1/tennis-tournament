@@ -5,7 +5,10 @@ import { useLang } from "@/lib/i18n"
 import AdminHome from "@/pages/admin/AdminHome"
 import AdminTournament from "@/pages/admin/AdminTournament"
 import AnimationExamples from "@/pages/AnimationExamples"
+import JoinLeague from "@/pages/JoinLeague"
 import Landing from "@/pages/Landing"
+import LeaguePage from "@/pages/League"
+import Leagues from "@/pages/Leagues"
 import Login from "@/pages/Login"
 import NewPassword from "@/pages/NewPassword"
 import Points from "@/pages/Points"
@@ -31,6 +34,9 @@ export default function App() {
         <Route path="/regles" element={<Rules />} />
         <Route path="/points" element={<Points />} />
         <Route path="/saison" element={<Protected><Season /></Protected>} />
+        <Route path="/ligues" element={<Protected><Leagues /></Protected>} />
+        <Route path="/ligues/:id" element={<Protected><LeaguePage /></Protected>} />
+        <Route path="/rejoindre/:code" element={<JoinLeague />} />
         <Route path="/profil" element={<Protected><Profile /></Protected>} />
         <Route path="/admin" element={<Protected admin><AdminHome /></Protected>} />
         <Route path="/admin/tournois/:id" element={<Protected admin><AdminTournament /></Protected>} />

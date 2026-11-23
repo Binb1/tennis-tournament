@@ -1,6 +1,6 @@
 import { useState, type ComponentProps, type ReactNode } from "react"
 import { Link, NavLink } from "react-router-dom"
-import { Eye, EyeOff, ListOrdered, Search, Shield, Trophy, User, type LucideIcon } from "lucide-react"
+import { Eye, EyeOff, ListOrdered, Search, Shield, Trophy, User, Users, type LucideIcon } from "lucide-react"
 
 import { BallMark } from "@/components/court/BallMark"
 import { LangSwitch } from "@/components/court/LangSwitch"
@@ -22,6 +22,7 @@ export function AppShell({ children, bare = false, wide = false }: { children: R
   const items: [string, string, LucideIcon][] = [
     ["/tournois", t("shell.navTournaments"), Trophy],
     ["/saison", t("shell.navSeason"), ListOrdered],
+    ["/ligues", t("shell.navLeagues"), Users],
     ["/profil", t("shell.navProfile"), User],
     ...(profile?.is_admin ? [["/admin", t("shell.navAdmin"), Shield] as [string, string, LucideIcon]] : []),
   ]

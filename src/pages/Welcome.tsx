@@ -6,6 +6,7 @@ import { AppShell, ChalkButton, ErrorBox, Field, PageTitle } from "@/components/
 import { track } from "@/lib/analytics"
 import { useAuth } from "@/lib/auth"
 import { t, getLang } from "@/lib/i18n"
+import { homePath } from "@/lib/leagues"
 import { supabase } from "@/lib/supabase"
 import { HandleField, parseSocials } from "@/components/court/Socials"
 
@@ -58,7 +59,7 @@ export default function Welcome() {
     }
     track("signed_up", {})
     await refreshProfile()
-    navigate("/tournois", { replace: true })
+    navigate(homePath(), { replace: true })
   }
 
   return (

@@ -5,6 +5,7 @@ export default ns(
   {
     navTournaments: "Tournois",
     navSeason: "Saison",
+    navLeagues: "Ligues",
     navProfile: "Profil",
     navAdmin: "Admin",
     navigation: "Navigation",
@@ -22,6 +23,7 @@ export default ns(
   {
     navTournaments: "Tournaments",
     navSeason: "Season",
+    navLeagues: "Leagues",
     navProfile: "Profile",
     navAdmin: "Admin",
     navigation: "Navigation",
@@ -39,6 +41,7 @@ export default ns(
   {
     navTournaments: "Torneos",
     navSeason: "Temporada",
+    navLeagues: "Ligas",
     navProfile: "Perfil",
     navAdmin: "Admin",
     navigation: "Navegación",

@@ -222,11 +222,20 @@ Sources: pages above, checked 2026-09-25.
 | Rain delays push matches past the next lock | Picking players still to play is allowed, at your risk (see above); locks follow the synced schedule |
 | User deletes account | Entry kept, username shown as "deleted user" |
 
+## Friend leagues
+
+A league is a group of friends with an invite code, and only a filter: same entries, picks and points as the global game (migration 0020).
+
+- Anyone creates one (becomes its owner) or joins with the 6-character code, typed under "Ligues", or through the link `/rejoindre/CODE` (shared, or scanned as a QR code). At most 3 leagues per player, created and joined together.
+- A logged-out invite shows the league's name and owner, then login; the code is kept on the device so sign-up / login comes back to it.
+- The season ranking and each tournament's leaderboard get an "Everyone / my leagues" switch (last choice remembered on the device). The league page ranks its members on the current season.
+- Owner: rename, remove a member, draw a new code (the old one stops working). Leaving as owner hands the league to the longest-standing member; the last member out deletes it.
+- Members only see their own leagues; writes only through the functions (create_league, join_league, leave_league, rename_league, remove_league_member, reset_league_code; league_by_code for the invite page).
+
 ## Out of scope / later
 
 The v1 schema already leaves room for each of these without a migration of existing data.
 
-- Private pools with an invite code (add pools table; entries.pool_id).
 - Email reminders before each lock (Edge Function + email).
 - Tiebreaks (e.g. "audace" score from the demo, or final score prediction).
 - Auto-pick instead of elimination on a missing pick.
