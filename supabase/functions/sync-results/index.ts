@@ -363,6 +363,18 @@ async function scheduledRun(db: Db, key: string) {
   return { runs: summary, budget_left: left }
 }
 
+/** The project's secret keys: the legacy service role key, and the new ones (SUPABASE_SECRET_KEYS, JSON name → key). */
+function serviceKeys(): string[] {
+  const keys = [Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""]
+  try {
+    const all = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") ?? "{}")
+    keys.push(...(Array.isArray(all) ? all : Object.values(all)).filter((k): k is string => typeof k === "string"))
+  } catch {
+    // not JSON: no extra keys
+  }
+  return keys.filter(Boolean)
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors })
 
@@ -372,8 +384,8 @@ Deno.serve(async (req) => {
   // Auth: cron secret, the service role key (scripts, same rights as the database itself), or an admin user.
   const cronSecret = Deno.env.get("CRON_SECRET")
   const isCron = !!cronSecret && req.headers.get("x-cron-secret") === cronSecret
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
-  const isService = !!serviceKey && req.headers.get("Authorization") === `Bearer ${serviceKey}`
+  const bearer = req.headers.get("Authorization")?.replace(/^Bearer /, "") ?? ""
+  const isService = !!bearer && serviceKeys().includes(bearer)
   if (!isCron && !isService) {
     const user = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!, {
       global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
