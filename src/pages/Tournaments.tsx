@@ -42,6 +42,7 @@ export default function Tournaments() {
   const now = useNow(30_000)
   const [error, setError] = useState<string | null>(null)
   const [reload, setReload] = useState(0)
+  const [chosenYear, setChosenYear] = useState<number | null>(null)
 
   useEffect(() => {
     let active = true
@@ -81,18 +82,48 @@ export default function Tournaments() {
     }
   }, [session, reload])
 
+  // The calendar holds several seasons: one at a time, by default the one still being played (its earliest
+  // tournament not finished yet), so the new season shows up once the last one is over.
+  const yearOf = (x: Tournament) => new Date(x.starts_at!).getFullYear()
+  const dated = (rows ?? []).filter((x) => x.starts_at)
+  const years = [...new Set(dated.map(yearOf))].sort((a, b) => a - b)
+  const upcoming = dated.filter((x) => x.status !== "finished").map(yearOf)
+  const defaultYear = upcoming.length ? Math.min(...upcoming) : new Date().getFullYear()
+  const year = chosenYear ?? defaultYear
+  // Undated tournaments stay with the default season.
+  const shown = (rows ?? []).filter((x) => (x.starts_at ? yearOf(x) === year : year === defaultYear))
+
   return (
     <AppShell>
-      <PageTitle eyebrow={t("tournaments.eyebrow", { year: new Date().getFullYear() })}>{t("tournaments.title")}</PageTitle>
+      <PageTitle eyebrow={t("tournaments.eyebrow", { year })}>{t("tournaments.title")}</PageTitle>
       {error && <ErrorBox message={error} onRetry={() => setReload((n) => n + 1)} />}
       {!rows && !error && <Loading />}
       {rows && <ThisWeek rows={rows} now={now} />}
       {rows && <ToDo rows={rows} mine={mine} openRound={openRound} lastPicks={lastPicks} now={now} />}
       {rows && rows.length === 0 && <p className="py-8 text-center text-chalk/85">{t("tournaments.empty")}</p>}
+      {years.length > 1 && (
+        <div role="radiogroup" aria-label={t("tournaments.season")} className="mb-4 flex flex-wrap gap-2">
+          {years.map((y) => (
+            <button
+              key={y}
+              role="radio"
+              aria-checked={y === year}
+              onClick={() => setChosenYear(y)}
+              className={cn(
+                "min-h-11 rounded-[2px] border-2 px-3 text-sm font-bold tabular-nums",
+                y === year ? "border-chalk bg-chalk text-ink" : "border-chalk/60 hover:bg-chalk/10",
+              )}
+            >
+              {y}
+            </button>
+          ))}
+        </div>
+      )}
       {rows &&
-        // One section per month, folded except the current one: what's urgent is in "This week" / "To do" above.
-        groupByMonth(rows).map(({ key, title, current, list }) => (
-          <details key={key} open={current} className="group mb-4">
+        // One section per month, folded except the current one (another season: its first month), what's urgent is
+        // in "This week" / "To do" above.
+        groupByMonth(shown).map(({ key, title, current, list }, i, all) => (
+          <details key={key} open={current || (i === 0 && !all.some((g) => g.current))} className="group mb-4">
             <summary className="mb-3 flex min-h-11 cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
               <h2 className="micro-label">
                 {title} · {list.length}

@@ -4,6 +4,7 @@ import { ns } from "@/locales/ns"
 export default ns(
   {
     eyebrow: "Saison {year}",
+    season: "Saison",
     title: "Tournois",
     empty: "Aucun tournoi pour l'instant.",
     thisWeek: "Cette semaine",
@@ -28,6 +29,7 @@ export default ns(
   },
   {
     eyebrow: "Season {year}",
+    season: "Season",
     title: "Tournaments",
     empty: "No tournaments yet.",
     thisWeek: "This week",
@@ -52,6 +54,7 @@ export default ns(
   },
   {
     eyebrow: "Temporada {year}",
+    season: "Temporada",
     title: "Torneos",
     empty: "Todavía no hay torneos.",
     thisWeek: "Esta semana",

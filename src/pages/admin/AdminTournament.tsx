@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react"
 import { Link, useParams } from "react-router-dom"
 import { ArrowLeft } from "lucide-react"
 
-import { AppShell, Box, ChalkButton, ErrorBox, LineButton, Loading, PageTitle, Tag } from "@/components/court/AppShell"
+import { AppShell, Box, ChalkButton, ErrorBox, Field, LineButton, Loading, PageTitle, Tag } from "@/components/court/AppShell"
 import type { Category } from "@/lib/scoring"
 import { suggestTheme, themeLabel, useThemeOverride } from "@/lib/theme"
 import { formatTime, useNow } from "@/lib/time"
@@ -758,9 +758,7 @@ function SyncSection({ data, onChanged }: Props) {
   return (
     <Section title="Synchronisation">
       <NextSync t={data.t} />
-      <p className="mb-3 text-sm text-chalk/85">
-        {data.t.external_id ? `Identifiant API : ${data.t.external_id}` : "Aucun identifiant API : la synchronisation est inactive."}
-      </p>
+      <ExternalIdForm data={data} onChanged={onChanged} />
       <ChalkButton onClick={syncNow} disabled={busy || !data.t.external_id} className="w-full">
         {busy ? "Synchronisation…" : "Synchroniser maintenant"}
       </ChalkButton>
@@ -795,6 +793,52 @@ function SyncSection({ data, onChanged }: Props) {
  * Cron checks hourly at :00 ('0 * * * *', UTC). See scheduledRun in the sync-results Edge Function: results only
  * while a match is due (or every 6 h), draws in the 3 days before the first lock, status follows the calendar.
  */
+/** The API's id of this edition (it changes every year). Preloaded seasons start without one: no sync until it's set. */
+function ExternalIdForm({ data, onChanged }: Props) {
+  const { busy, error, run } = useWrite(onChanged)
+  const current = data.t.external_id ?? ""
+  const [value, setValue] = useState(current)
+
+  function save() {
+    const id = value.trim() || null
+    return run("external_id", async () => {
+      const res = await supabase.from("tournaments").update({ external_id: id }).eq("id", data.t.id)
+      if (!res.error) await logAdmin("set_external_id", { tournament_id: data.t.id, from: data.t.external_id ?? null, to: id })
+      return res
+    })
+  }
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        save()
+      }}
+      className="mb-3"
+    >
+      <div className="flex items-end gap-3">
+        <div className="flex-1">
+          <Field
+            label="Identifiant API"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            disabled={!!busy}
+            inputMode="numeric"
+            placeholder="21349"
+          />
+        </div>
+        {value.trim() !== current && (
+          <ChalkButton type="submit" disabled={!!busy}>
+            Enregistrer
+          </ChalkButton>
+        )}
+      </div>
+      {!current && <p className="mt-2 text-sm text-chalk/85">Aucun identifiant API : la synchronisation est inactive.</p>}
+      {error && <div className="mt-3"><ErrorBox message={error} /></div>}
+    </form>
+  )
+}
+
 function NextSync({ t }: { t: Tournament }) {
   const now = useNow(10_000)
   const hour = 60 * 60_000
