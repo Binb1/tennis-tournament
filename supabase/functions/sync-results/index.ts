@@ -1,12 +1,15 @@
 // Edge Function sync-results: pulls the singles draw from "Tennis API - ATP WTA ITF" (RapidAPI)
 // into matches (bracket, opponents, scores) and player_results (won/lost).
 // Body {tournament_id, action: "import_draw"} (admin only) imports the main-draw players, their country and ranking.
+// Body {action: "match_calendar", year, dry} (admin only) matches the year's tournaments to the API calendar (dry run
+// by default: a report, nothing written). The hourly run fills missing ids the same way (calendar.ts).
 // API calls: sync = 1 per live tournament (draws; results endpoint only as fallback), import = 2 (draws + rankings).
 // Called by pg_cron every hour (header x-cron-secret) or by an admin from the admin page (user JWT).
 // Hourly run: status follows the calendar (advance_tournaments), draws import themselves in the 3 days before the
 // first lock, results sync only while matches are due, and every call counts against a rolling 24 h budget.
 // Secrets (Edge Function secrets): TENNIS_API_KEY, CRON_SECRET.
 import { createClient } from "npm:@supabase/supabase-js@2"
+import { matchCalendar, parseCalendar, type Ours } from "./calendar.ts"
 import {
   type ApiMatch, type Side, type Slot, drawResults, parseDraw, parseDrawMatches, parseRankings, parseResults,
 } from "./parse.ts"
@@ -49,6 +52,62 @@ const norm = (s: string) =>
 /** Full singles draw (all main rounds, bracket slots, results). Path order: tournament/{tour}/{id}/{year}/draws. */
 const fetchDraw = (c: Api, t: Tournament) =>
   api(c, `tournament/${t.tour.toLowerCase()}/${t.external_id}/${new Date(t.starts_at ?? Date.now()).getUTCFullYear()}/draws?includeAll=true`)
+
+/** Every page of a year's calendar (the first page tells the page numbering), at most 5 calls. */
+async function fetchCalendar(c: Api, tour: string, year: number) {
+  const path = `${tour.toLowerCase()}/tournament/calendar/${year}?pageSize=500`
+  const pages = [await api(c, path)]
+  while (pages.at(-1)?.hasNextPage && pages.length < 5) {
+    const last = pages.at(-1)
+    pages.push(await api(c, `${path}&pageNo=${Number(last.pageNo ?? pages.length) + 1}`))
+  }
+  return pages
+}
+
+/**
+ * Tennis API ids from the calendar (calendar.ts has the matching rules). The report covers every ATP tournament of
+ * the year, those that already have an id too (`agrees`: the matcher finds the same one). Unless `dry`, writes the
+ * "matched" ids of tournaments without one, never over an existing id, each logged in admin_log.
+ */
+async function fillExternalIds(db: Db, c: Api, year: number, dry: boolean) {
+  const [{ data: ours, error }, { data: held }] = await Promise.all([
+    db.from("tournaments").select("id, name, starts_at, category, country, external_id")
+      .eq("tour", "ATP").eq("test", false)
+      .gte("starts_at", `${year}-01-01`).lt("starts_at", `${year + 1}-01-01`),
+    db.from("tournaments").select("id, external_id").not("external_id", "is", null),
+  ])
+  if (error) throw new Error(error.message)
+  // A dry run's calls count against the budget too, under its own kind so it doesn't hold back the daily fill.
+  const run = { tournament_id: null, kind: dry ? "calendar_dry" : "calendar", ok: false, matches: 0, updated: 0, error: null as string | null, unmatched: [] as string[] }
+  const report = []
+  try {
+    const events = parseCalendar(await fetchCalendar(c, "ATP", year))
+    run.matches = events.length
+    const used = new Map<string, string>((held ?? []).map((t: Db) => [String(t.external_id), t.id]))
+    const byId = new Map((ours as Ours[]).map((t) => [t.id, t]))
+    for (const m of matchCalendar(ours as Ours[], events, used)) {
+      const current = byId.get(m.tournament_id)!.external_id
+      report.push({ ...m, current, agrees: current == null ? null : current === m.external_id })
+      if (current != null) continue
+      if (m.status !== "matched") {
+        run.unmatched.push(`${m.name} (${m.status})`)
+        continue
+      }
+      if (dry) continue
+      const { data: set } = await db.from("tournaments").update({ external_id: m.external_id })
+        .eq("id", m.tournament_id).is("external_id", null).select("id")
+      if (set?.length) {
+        run.updated++
+        await db.from("admin_log").insert({ admin_id: null, action: "auto_external_id", payload: { tournament_id: m.tournament_id, name: m.name, external_id: m.external_id, event: m.candidates.find((e) => e.id === m.external_id) } })
+      }
+    }
+    run.ok = true
+  } catch (e) {
+    run.error = e instanceof Error ? e.message : String(e)
+  }
+  await db.from("sync_runs").insert({ ...run, api_calls: c.calls })
+  return { year, dry, api_calls: c.calls, events: run.matches, written: run.updated, error: run.error, report }
+}
 
 /** Player lookup: API id first, then normalized name. */
 function playerFinder(players: { id: string; name: string; external_id: string | null }[]) {
@@ -285,6 +344,21 @@ async function scheduledRun(db: Db, key: string) {
     left -= c.calls
   }
 
+  // Missing ids of tournaments starting within 60 days: the year's calendar, once a day at most.
+  const { data: missing } = await db.from("tournaments").select("starts_at")
+    .is("external_id", null).eq("status", "registration").eq("tour", "ATP").eq("test", false)
+    .lte("starts_at", new Date(now + 60 * 24 * HOUR).toISOString())
+  const lastCalendar = Math.max(0, ...(runs ?? []).filter((r: Db) => r.kind === "calendar").map((r: Db) => Date.parse(r.at)))
+  if (missing?.length && now - lastCalendar >= 24 * HOUR - SLACK) {
+    for (const year of new Set<number>(missing.map((t: Db) => new Date(t.starts_at).getUTCFullYear()))) {
+      if (left < 5) break
+      const c = { key, calls: 0 }
+      const r = await fillExternalIds(db, c, year, false)
+      summary.push({ kind: "calendar", year, written: r.written, error: r.error })
+      left -= c.calls
+    }
+  }
+
   await db.rpc("advance_tournaments")
   return { runs: summary, budget_left: left }
 }
@@ -295,10 +369,12 @@ Deno.serve(async (req) => {
   const url = Deno.env.get("SUPABASE_URL")!
   const db = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!)
 
-  // Auth: cron secret, or an admin user.
+  // Auth: cron secret, the service role key (scripts, same rights as the database itself), or an admin user.
   const cronSecret = Deno.env.get("CRON_SECRET")
   const isCron = !!cronSecret && req.headers.get("x-cron-secret") === cronSecret
-  if (!isCron) {
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
+  const isService = !!serviceKey && req.headers.get("Authorization") === `Bearer ${serviceKey}`
+  if (!isCron && !isService) {
     const user = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!, {
       global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
     })
@@ -310,6 +386,11 @@ Deno.serve(async (req) => {
   if (!apiKey) return json({ error: "Secret TENNIS_API_KEY manquant" }, 500)
 
   const body = await req.json().catch(() => ({}))
+  if (body.action === "match_calendar") {
+    const year = Number(body.year)
+    if (isCron || !Number.isInteger(year)) return json({ error: "Requête invalide" }, 400)
+    return json(await fillExternalIds(db, { key: apiKey, calls: 0 }, year, body.dry !== false))
+  }
   if (body.action === "import_draw") {
     if (isCron || !body.tournament_id) return json({ error: "Requête invalide" }, 400)
     return importDraw(db, { key: apiKey, calls: 0 }, body.tournament_id)
