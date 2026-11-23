@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties } from "react"
 import { Link } from "react-router-dom"
 
 import { AppShell, Box, ErrorBox, FindMe, Loading, ME_ROW, PageTitle, SearchInput } from "@/components/court/AppShell"
+import { LeagueScope, useLeagueScope } from "@/components/court/LeagueScope"
 import { ClimbArrow, PixelPodium } from "@/components/pixel/Animations"
 import { useAuth } from "@/lib/auth"
 import { t } from "@/lib/i18n"
@@ -19,6 +20,7 @@ export default function Season() {
   const [reload, setReload] = useState(0)
   const [chosen, setChosen] = useState<number | null>(null)
   const [q, setQ] = useState("")
+  const scope = useLeagueScope()
   // My rank per season at my previous visit, read once: a climb since then gets the arrow.
   const [prevRanks] = useState<Record<string, number>>(() => {
     try {
@@ -44,10 +46,12 @@ export default function Season() {
 
   const seasons = rows ? seasonsOf(rows) : []
   const season = chosen ?? seasons[0] ?? new Date().getFullYear()
-  const ranked = rankSeason((rows ?? []).filter((r) => r.season === season))
+  const members = scope.members
+  const ranked = rankSeason((rows ?? []).filter((r) => r.season === season && (!members || members.has(r.user_id))))
   const me = ranked.find((r) => r.user_id === uid)
-  const climb = me && prevRanks[season] > me.rank ? prevRanks[season] - me.rank : 0
-  const myRank = me?.rank
+  // The climb arrow compares overall ranks only: a league rank is another ladder.
+  const climb = me && !members && prevRanks[season] > me.rank ? prevRanks[season] - me.rank : 0
+  const myRank = members ? undefined : me?.rank
   useEffect(() => {
     if (myRank == null) return
     let saved: Record<string, number> = {}
@@ -63,7 +67,7 @@ export default function Season() {
 
   return (
     <AppShell>
-      <PageTitle eyebrow={t("season.eyebrow")}>{t("season.title", { year: season })}</PageTitle>
+      <PageTitle eyebrow={scope.league?.name ?? t("season.eyebrow")}>{t("season.title", { year: season })}</PageTitle>
       <p className="-mt-2 mb-6 text-sm text-chalk/85">
         {t("season.intro")}{" "}
         <Link to="/points" className="underline underline-offset-4">
@@ -75,6 +79,8 @@ export default function Season() {
           {t("season.resetNote", { date: formatDate(resetAt) })}
         </p>
       )}
+
+      <LeagueScope scope={scope} className="mb-4" />
 
       {seasons.length > 1 && (
         <div className="mb-6 flex flex-wrap gap-2">

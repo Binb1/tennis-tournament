@@ -5,6 +5,7 @@ import { ArrowLeft, Check, ChevronRight, Minus, Pencil, X } from "lucide-react"
 import { AppShell, Box, ChalkButton, ErrorBox, FindMe, LineButton, Loading, ME_ROW, PageTitle, ResultTag, SearchInput, Tag } from "@/components/court/AppShell"
 import { Bracket } from "@/components/court/Bracket"
 import { StakeCard } from "@/components/court/PointsStake"
+import { LeagueScope, useLeagueScope } from "@/components/court/LeagueScope"
 import { Flag, MatchLine, PlayerName } from "@/components/court/PlayerLabel"
 import { SocialIcons } from "@/components/court/Socials"
 import { BallBoyRun, PixelNetFault, PixelWin, ShotClock } from "@/components/pixel/Animations"
@@ -240,7 +241,7 @@ function TournamentView({ id }: { id: string }) {
       {error && <div className="mt-4"><ErrorBox message={error} onRetry={reload} /></div>}
       <div className="mt-6">
         {tab === "pick" && <MyPick data={data} d={d} onChanged={reload} onPlan={openPlanner} />}
-        {tab === "board" && <Leaderboard data={data} d={d} uid={uid} />}
+        {tab === "board" && <ScopedLeaderboard data={data} d={d} uid={uid} now={now} />}
         {tab === "draw" && <Draw data={data} d={d} />}
       </div>
     </AppShell>
@@ -1295,6 +1296,26 @@ function LockBlock({ round, planned = false, points }: { round: Round; planned?:
 
 /* ------------------------------------------------------------------ */
 /* Classement                                                          */
+
+/** The leaderboard for everyone, or only the entries of one of my leagues (counts, funnel and stats included). */
+function ScopedLeaderboard({ data, d, uid, now }: { data: Data; d: Derived; uid?: string; now: number }) {
+  const scope = useLeagueScope()
+  const members = scope.members
+  const scoped = useMemo(() => {
+    if (!members) return { data, d }
+    const entries = data.entries.filter((e) => e.user_id && members.has(e.user_id))
+    const ids = new Set(entries.map((e) => e.id))
+    const mine = <T extends { entry_id: string }>(rows: T[]) => rows.filter((r) => ids.has(r.entry_id))
+    const sub = { ...data, entries, statuses: mine(data.statuses), picks: mine(data.picks), waivers: mine(data.waivers), champions: mine(data.champions) }
+    return { data: sub, d: derive(sub, uid, now) }
+  }, [data, d, members, uid, now])
+  return (
+    <>
+      <LeagueScope scope={scope} className="mb-6" />
+      <Leaderboard data={scoped.data} d={scoped.d} uid={uid} />
+    </>
+  )
+}
 
 function Leaderboard({ data, d, uid }: { data: Data; d: Derived; uid?: string }) {
   const [q, setQ] = useState("")

@@ -21,8 +21,9 @@ import socials from "@/locales/socials"
 import theme from "@/locales/theme"
 import category from "@/locales/category"
 import time from "@/locales/time"
+import leagues from "@/locales/leagues"
 
-const all = { round, errors, lang, tournament, bracket, match, stake, landing, login, welcome, rules, points, auth, common, tournaments, season, profile, shell, socials, theme, category, time }
+const all = { round, errors, lang, tournament, bracket, match, stake, landing, login, welcome, rules, points, auth, common, tournaments, season, profile, shell, socials, theme, category, time, leagues }
 
 type All = typeof all
 export type Messages = { [N in keyof All]: All[N]["fr"] }

@@ -29,6 +29,8 @@ type Events = {
   signed_up: Record<string, never>
   tournament_joined: { tournament_id: string; tournament_name: string; category: string | null }
   pick_made: { tournament_id: string; round_name: string; is_change: boolean }
+  league_created: Record<string, never>
+  league_joined: { via: "code" | "link" }
 }
 
 export function track<E extends keyof Events>(event: E, props: Events[E]) {
