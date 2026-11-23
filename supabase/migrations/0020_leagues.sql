@@ -35,7 +35,7 @@ create policy league_members_read on league_members for select to authenticated 
 create policy admin_all on leagues for all to authenticated using (is_admin()) with check (is_admin());
 create policy admin_all on league_members for all to authenticated using (is_admin()) with check (is_admin());
 revoke all on leagues, league_members from anon;
-revoke insert, update, delete on leagues, league_members from authenticated;
+revoke insert, update, delete, truncate, trigger, references on leagues, league_members from authenticated;
 grant select on leagues, league_members to authenticated;
 
 -- 6 characters without look-alikes (no 0/O, 1/I/L), unused by any league.
@@ -166,6 +166,8 @@ begin
 end $$;
 
 revoke execute on function new_league_code(), league_slot_check(uuid), league_owner_check(uuid) from public, anon, authenticated;
+revoke execute on function is_league_member(uuid) from public, anon;
+grant execute on function is_league_member(uuid) to authenticated;
 revoke execute on function create_league(text), join_league(text), leave_league(uuid), rename_league(uuid, text),
   remove_league_member(uuid, uuid), reset_league_code(uuid) from public, anon;
 grant execute on function create_league(text), join_league(text), leave_league(uuid), rename_league(uuid, text),
