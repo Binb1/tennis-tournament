@@ -7,8 +7,10 @@
 // Called by pg_cron every hour (header x-cron-secret) or by an admin from the admin page (user JWT).
 // Hourly run: status follows the calendar (advance_tournaments), draws import themselves in the 3 days before the
 // first lock, results sync only while matches are due, and every call counts against a rolling 24 h budget.
+// Problems found by the hourly run go to PostHog, then Slack (alerts.ts).
 // Secrets (Edge Function secrets): TENNIS_API_KEY, CRON_SECRET.
 import { createClient } from "npm:@supabase/supabase-js@2"
+import { type Alert, type Open, capture, DAILY_HOUR, dailyProblems, expectsNextRun } from "./alerts.ts"
 import { matchCalendar, parseCalendar, type Ours } from "./calendar.ts"
 import {
   type ApiMatch, type Side, type Slot, drawResults, parseDraw, parseDrawMatches, parseRankings, parseResults,
@@ -24,7 +26,7 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } })
 
 type Tournament = { id: string; external_id: string; tour: string; starts_at: string | null }
-type Candidate = Tournament & { status: string; draw_size: number; players: { count: number }[] }
+type Candidate = Tournament & { name: string; status: string; draw_size: number; players: { count: number }[] }
 
 const HOUR = 3600_000
 const SLACK = 5 * 60_000 // cron runs drift by a few seconds: "every 6 h" must not slip to 7 h
@@ -68,8 +70,9 @@ async function fetchCalendar(c: Api, tour: string, year: number) {
  * Tennis API ids from the calendar (calendar.ts has the matching rules). The report covers every ATP tournament of
  * the year, those that already have an id too (`agrees`: the matcher finds the same one). Unless `dry`, writes the
  * "matched" ids of tournaments without one, never over an existing id, each logged in admin_log.
+ * `alerts` (hourly run): each id written, each id left to the admin within 21 days of the start, a failed calendar.
  */
-async function fillExternalIds(db: Db, c: Api, year: number, dry: boolean) {
+async function fillExternalIds(db: Db, c: Api, year: number, dry: boolean, alerts?: Alert[]) {
   const [{ data: ours, error }, { data: held }] = await Promise.all([
     db.from("tournaments").select("id, name, starts_at, category, country, external_id")
       .eq("tour", "ATP").eq("test", false)
@@ -91,6 +94,8 @@ async function fillExternalIds(db: Db, c: Api, year: number, dry: boolean) {
       if (current != null) continue
       if (m.status !== "matched") {
         run.unmatched.push(`${m.name} (${m.status})`)
+        const soon = Date.parse(byId.get(m.tournament_id)!.starts_at) - Date.now() <= 21 * 24 * HOUR
+        if (alerts && soon && m.status !== "none") alerts.push({ kind: "id_proposal", tournament_id: m.tournament_id, problem: proposal(m) })
         continue
       }
       if (dry) continue
@@ -98,15 +103,33 @@ async function fillExternalIds(db: Db, c: Api, year: number, dry: boolean) {
         .eq("id", m.tournament_id).is("external_id", null).select("id")
       if (set?.length) {
         run.updated++
-        await db.from("admin_log").insert({ admin_id: null, action: "auto_external_id", payload: { tournament_id: m.tournament_id, name: m.name, external_id: m.external_id, event: m.candidates.find((e) => e.id === m.external_id) } })
+        const event = m.candidates.find((e) => e.id === m.external_id)
+        await db.from("admin_log").insert({ admin_id: null, action: "auto_external_id", payload: { tournament_id: m.tournament_id, name: m.name, external_id: m.external_id, event } })
+        alerts?.push({
+          kind: "id_written",
+          tournament_id: m.tournament_id,
+          problem: `✅ ${m.name}: Tennis API id ${m.external_id} set automatically ("${event?.name}", ${event?.date.slice(0, 10)}).`,
+        })
       }
     }
     run.ok = true
   } catch (e) {
     run.error = e instanceof Error ? e.message : String(e)
+    alerts?.push({ kind: "sync_failed", problem: `🚨 Tennis API calendar ${year} failed: ${run.error.slice(0, 200)}` })
   }
   await db.from("sync_runs").insert({ ...run, api_calls: c.calls })
   return { year, dry, api_calls: c.calls, events: run.matches, written: run.updated, error: run.error, report }
+}
+
+/** Slack line for a calendar match left to the admin. */
+function proposal(m: ReturnType<typeof matchCalendar>[number]) {
+  const ev = (e: { id: string; name: string; date: string }) => `${e.id} "${e.name}" (${e.date.slice(0, 10)})`
+  if (m.status === "unsure") {
+    const e = m.candidates.find((x) => x.id === m.external_id)!
+    return `❓ ${m.name}: the calendar proposes ${ev(e)}, but the names differ. Check it, then set it in the admin.`
+  }
+  if (m.status === "taken") return `❓ ${m.name}: its calendar event ${m.candidates.map(ev).join(", ")} already belongs to another tournament.`
+  return `❓ ${m.name}: several calendar events fit: ${m.candidates.map(ev).join(", ")}. Set the right one in the admin.`
 }
 
 /** Player lookup: API id first, then normalized name. */
@@ -287,21 +310,25 @@ async function syncResults(db: Db, c: Api, t: Tournament) {
  * - draws in the 3 days before the first lock, every 6 h (2 h in the last 12 h), imported as soon as they name
  *   players (qualifiers fill in on the next checks), stored again only when new players show up, or on every check
  *   in the last 12 h (order of play -> lock times).
- * Status moves again at the end (live -> finished once the final is won).
+ * Status moves again at the end (live -> finished once the final is won). Problems go to PostHog (alerts.ts): failed
+ * syncs, ids written or left to the admin, work held back by the budget, and once a day missing ids and draws.
  */
-async function scheduledRun(db: Db, key: string) {
+async function scheduledRun(db: Db, key: string, alerts: Alert[]) {
   await db.rpc("advance_tournaments")
   const now = Date.now()
   const [{ data: ts, error }, { data: runs }] = await Promise.all([
-    db.from("tournaments").select("id, external_id, tour, starts_at, status, draw_size, players(count)")
+    db.from("tournaments").select("id, name, external_id, tour, starts_at, status, draw_size, players(count)")
       .not("external_id", "is", null).in("status", ["registration", "live"]),
-    db.from("sync_runs").select("tournament_id, at, kind, api_calls").gte("at", new Date(now - 24 * HOUR).toISOString()),
+    db.from("sync_runs").select("tournament_id, at, kind, api_calls, unmatched").gte("at", new Date(now - 24 * HOUR).toISOString()),
   ])
   if (error) throw new Error(error.message)
   let left = BUDGET - (runs ?? []).reduce((n: number, r: Db) => n + r.api_calls, 0)
   const lastRun = (id: string, kind: string) =>
     Math.max(0, ...(runs ?? []).filter((r: Db) => r.tournament_id === id && r.kind === kind).map((r: Db) => Date.parse(r.at)))
   const summary = []
+  const failed = (t: Candidate, kind: string, error: string | null) =>
+    error && alerts.push({ kind: "sync_failed", tournament_id: t.id, problem: `🚨 ${t.name}: ${kind} sync failed: ${error.slice(0, 200)}` })
+  let heldBack = false // work skipped for lack of budget
 
   const live = (ts ?? []).filter((t: Candidate) => t.status === "live") as Candidate[]
   const { data: due } = live.length
@@ -313,9 +340,14 @@ async function scheduledRun(db: Db, key: string) {
   for (const t of live.sort((a, b) => lastRun(a.id, "results") - lastRun(b.id, "results"))) {
     const since = now - lastRun(t.id, "results")
     if (since < gap || (!dueIds.has(t.id) && since < 6 * HOUR - SLACK)) continue
-    if (left < 1) break
+    if (left < 1) {
+      heldBack = true
+      break
+    }
     const c = { key, calls: 0 }
-    summary.push(await syncResults(db, c, t))
+    const run = await syncResults(db, c, t)
+    failed(t, "results", run.error)
+    summary.push(run)
     left -= c.calls
   }
 
@@ -326,7 +358,10 @@ async function scheduledRun(db: Db, key: string) {
   for (const t of waiting) {
     const toLock = Date.parse(t.starts_at!) - now
     if (now - lastRun(t.id, "draw") < (toLock < 12 * HOUR ? 2 : 6) * HOUR - SLACK) continue
-    if (left < 2) break
+    if (left < 2) {
+      heldBack = true
+      break
+    }
     const c = { key, calls: 0 }
     const run = { tournament_id: t.id, kind: "draw", ok: false, matches: 0, updated: 0, error: null as string | null }
     try {
@@ -339,6 +374,7 @@ async function scheduledRun(db: Db, key: string) {
     } catch (e) {
       run.error = e instanceof Error ? e.message : String(e)
     }
+    failed(t, "draw", run.error)
     await db.from("sync_runs").insert({ ...run, api_calls: c.calls })
     summary.push(run)
     left -= c.calls
@@ -351,16 +387,41 @@ async function scheduledRun(db: Db, key: string) {
   const lastCalendar = Math.max(0, ...(runs ?? []).filter((r: Db) => r.kind === "calendar").map((r: Db) => Date.parse(r.at)))
   if (missing?.length && now - lastCalendar >= 24 * HOUR - SLACK) {
     for (const year of new Set<number>(missing.map((t: Db) => new Date(t.starts_at).getUTCFullYear()))) {
-      if (left < 5) break
+      if (left < 5) {
+        heldBack = true
+        break
+      }
       const c = { key, calls: 0 }
-      const r = await fillExternalIds(db, c, year, false)
+      const r = await fillExternalIds(db, c, year, false, alerts)
       summary.push({ kind: "calendar", year, written: r.written, error: r.error })
       left -= c.calls
     }
   }
 
   await db.rpc("advance_tournaments")
-  return { runs: summary, budget_left: left }
+
+  // Every 6 h at most, not every hour, while the budget holds work back.
+  const hour = new Date(now).getUTCHours()
+  if (heldBack && hour % 6 === 0) {
+    alerts.push({ kind: "budget", problem: `⚠️ Tennis API budget used up (${Math.max(0, left)} of ${BUDGET} calls left over 24 h): syncs are waiting.` })
+  }
+  // Open tournaments, as they stand after this run: lasting problems (once a day) and the heartbeat.
+  const { data: open } = await db.from("tournaments")
+    .select("id, name, external_id, status, tour, test, starts_at, draw_size, players(count)")
+    .in("status", ["registration", "live"])
+  const ot: Open[] = (open ?? []).map((t: Db) => ({ ...t, players: t.players[0]?.count ?? 0 }))
+  if (hour === DAILY_HOUR) {
+    // Last calendar status of each tournament still without an id: "Name (unsure)" in sync_runs.unmatched.
+    const calendar = new Map<string, string>()
+    for (const r of (runs ?? []).filter((r: Db) => r.kind === "calendar").sort((a: Db, b: Db) => Date.parse(a.at) - Date.parse(b.at))) {
+      for (const u of r.unmatched ?? []) {
+        const m = /^(.*) \((\w+)\)$/.exec(u)
+        if (m) calendar.set(m[1], m[2])
+      }
+    }
+    alerts.push(...dailyProblems(ot, now, calendar))
+  }
+  return { runs: summary, budget_left: left, expects_next: expectsNextRun(ot, Date.now()) }
 }
 
 /** The project's secret keys: the legacy service role key, and the new ones (SUPABASE_SECRET_KEYS, JSON name → key). */
@@ -414,9 +475,16 @@ Deno.serve(async (req) => {
     const run = await syncResults(db, { key: apiKey, calls: 0 }, t)
     return json({ tournaments: 1, runs: [run] })
   }
+  // Scheduled run: whatever happens, its problems and a heartbeat go to PostHog (alerts.ts).
+  const alerts: Alert[] = []
   try {
-    return json(await scheduledRun(db, apiKey))
+    const res = await scheduledRun(db, apiKey, alerts)
+    await capture(alerts, { budget_left: res.budget_left, runs: res.runs.length, expects_next: res.expects_next, by: isCron ? "cron" : "manual" })
+    return json(res)
   } catch (e) {
-    return json({ error: e instanceof Error ? e.message : String(e) }, 500)
+    const error = e instanceof Error ? e.message : String(e)
+    alerts.push({ kind: "crashed", problem: `🚨 sync-results crashed: ${error.slice(0, 200)}` })
+    await capture(alerts, { expects_next: true, crashed: true, by: isCron ? "cron" : "manual" })
+    return json({ error }, 500)
   }
 })
